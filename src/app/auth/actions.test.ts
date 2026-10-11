@@ -117,6 +117,62 @@ describe("server-side Supabase authentication", () => {
     expect(mocks.eq).toHaveBeenCalledWith("id", "authenticated-user");
   });
 
+  it("routes an email-confirmed admin signup to its pending approval status", async () => {
+    mocks.getUser.mockResolvedValue({
+      data: {
+        user: {
+          id: "authenticated-user",
+          user_metadata: { account_type: "admin" },
+        },
+      },
+      error: null,
+    });
+    mocks.maybeSingle
+      .mockResolvedValueOnce({
+        data: { role: "job_seeker", account_status: "active" },
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: { status: "pending" },
+        error: null,
+      });
+
+    await expect(
+      loginAction(
+        {},
+        formData({ email: "admin@example.com", password: "secret-password" }),
+      ),
+    ).rejects.toThrow("redirect:/admin-access?status=pending");
+  });
+
+  it("routes rejected admin applicants to an explicit status screen", async () => {
+    mocks.getUser.mockResolvedValue({
+      data: {
+        user: {
+          id: "authenticated-user",
+          user_metadata: { account_type: "admin" },
+        },
+      },
+      error: null,
+    });
+    mocks.maybeSingle
+      .mockResolvedValueOnce({
+        data: { role: "job_seeker", account_status: "active" },
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: { status: "rejected" },
+        error: null,
+      });
+
+    await expect(
+      loginAction(
+        {},
+        formData({ email: "admin@example.com", password: "secret-password" }),
+      ),
+    ).rejects.toThrow("redirect:/admin-access?status=rejected");
+  });
+
   it("does not retain sessions for suspended users or accounts without profiles", async () => {
     mocks.maybeSingle.mockResolvedValue({
       data: { role: "admin", account_status: "suspended" },

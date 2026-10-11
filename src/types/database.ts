@@ -12,6 +12,7 @@ type ProfileRow = {
   display_name: string | null;
   location: string | null;
   designation: string | null;
+  phone: string | null;
   specialization: string | null;
   terms_accepted_at: string | null;
   account_status: "active" | "suspended";
@@ -39,6 +40,10 @@ type JobRow = {
   required_qualifications: string[];
   min_experience_years: number;
   application_deadline: string | null;
+  application_instructions: string;
+  mandatory_education: string | null;
+  location_restrictions: string[];
+  owner_admin_id: string | null;
   status: "draft" | "published" | "closed";
   published_at: string | null;
   created_at: string;
@@ -70,6 +75,7 @@ type ApplicationRow = {
     | "under_review"
     | "shortlisted"
     | "rejected"
+    | "selected"
     | "withdrawn";
   status_changed_at: string;
 };
@@ -99,6 +105,8 @@ export type Database = {
           sector: Database["public"]["Enums"]["organization_sector"];
           created_by: string | null;
           is_verified: boolean;
+          contact_email: string | null;
+          contact_phone: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -108,6 +116,8 @@ export type Database = {
           sector: Database["public"]["Enums"]["organization_sector"];
           created_by?: string | null;
           is_verified?: boolean;
+          contact_email?: string | null;
+          contact_phone?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -117,6 +127,8 @@ export type Database = {
           sector?: Database["public"]["Enums"]["organization_sector"];
           created_by?: string | null;
           is_verified?: boolean;
+          contact_email?: string | null;
+          contact_phone?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -196,6 +208,18 @@ export type Database = {
       applications: TableDefinition<
         ApplicationRow,
         never,
+        { status?: ApplicationRow["status"]; status_changed_at?: string }
+      >;
+      application_status_history: TableDefinition<
+        {
+          id: string;
+          application_id: string;
+          changed_by: string;
+          previous_status: ApplicationRow["status"];
+          new_status: ApplicationRow["status"];
+          changed_at: string;
+        },
+        never,
         never
       >;
       course_interactions: TableDefinition<
@@ -265,6 +289,13 @@ export type Database = {
         };
         Returns: string;
       };
+      admin_update_application_status: {
+        Args: {
+          target_application_id: string;
+          new_status: Database["public"]["Enums"]["application_status"];
+        };
+        Returns: undefined;
+      };
     };
     Enums: {
       application_role: "job_seeker" | "admin" | "training_provider";
@@ -278,6 +309,7 @@ export type Database = {
         | "under_review"
         | "shortlisted"
         | "rejected"
+        | "selected"
         | "withdrawn";
       course_interaction_type: "link_click" | "inquiry";
     };

@@ -130,7 +130,34 @@ export async function loginAction(
       };
     }
 
-    destination = getDashboardPath(profile.role);
+    if (
+      profile.role === "job_seeker" &&
+      user.user_metadata?.account_type === "admin"
+    ) {
+      const { data: accessRequest, error: requestError } = await supabase
+        .from("admin_access_requests")
+        .select("status")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (requestError) {
+        await supabase.auth.signOut();
+        return {
+          error:
+            "We couldn’t check your administrator access request. Please try again later.",
+        };
+      }
+
+      if (accessRequest?.status === "pending") {
+        destination = "/admin-access?status=pending";
+      } else if (accessRequest?.status === "rejected") {
+        destination = "/admin-access?status=rejected";
+      } else {
+        destination = getDashboardPath(profile.role);
+      }
+    } else {
+      destination = getDashboardPath(profile.role);
+    }
   } catch (error) {
     return { error: getSafeAuthError(error) };
   }

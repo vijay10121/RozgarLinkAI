@@ -53,7 +53,8 @@ export default function LoginPage() {
               Log in to RozgarLink
             </h2>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              Use the email and password linked to your account.
+              Use the email and password linked to your account. Admin
+              registrations still require a separate administrator approval.
             </p>
           </div>
           <Suspense

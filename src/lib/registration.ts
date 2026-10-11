@@ -208,17 +208,3 @@ export function getRegistrationMetadata(
 
   return metadata;
 }
-
-export type RegistrationStatus =
-  | { kind: "email_confirmation"; email: string; role: RegistrationRole }
-  | { kind: "complete"; role: RegistrationRole };
-
-export function getRegistrationStatus(
-  hasSession: boolean,
-  email: string,
-  role: RegistrationRole,
-): RegistrationStatus {
-  return hasSession
-    ? { kind: "complete", role }
-    : { kind: "email_confirmation", email, role };
-}

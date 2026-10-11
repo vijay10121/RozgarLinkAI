@@ -69,4 +69,30 @@ describe("server-side Supabase session cookies", () => {
       expect.any(Object),
     );
   });
+
+  it("does not fail when a Server Component cannot write refreshed cookies", async () => {
+    mocks.cookies.set.mockImplementation(() => {
+      throw new Error("Cookies can only be modified in a Server Action or Route Handler.");
+    });
+
+    await createClient();
+    const options = mocks.createServerClient.mock.calls[0]?.[2] as {
+      cookies: {
+        setAll: (
+          entries: {
+            name: string;
+            value: string;
+            options?: Record<string, unknown>;
+          }[],
+        ) => void;
+      };
+    };
+
+    expect(() =>
+      options.cookies.setAll([
+        { name: "sb-session", value: "refreshed-cookie" },
+      ]),
+    ).not.toThrow();
+    expect(mocks.cookies.set).toHaveBeenCalledOnce();
+  });
 });

@@ -84,12 +84,12 @@ describe("registration form", () => {
     expect(signUp).not.toHaveBeenCalled();
   });
 
-  it("sends a real Auth signup request and displays the email-confirmation state", async () => {
+  it("creates an immediately authenticated account without an email-confirmation step", async () => {
     const user = userEvent.setup();
     signUp.mockResolvedValue({
       data: {
         user: { id: "auth-user-id", identities: [{ id: "identity-id" }] },
-        session: null,
+        session: { access_token: "test-access-token" },
       },
       error: null,
     });
@@ -115,7 +115,6 @@ describe("registration form", () => {
         email: "alex@example.com",
         password: "longpassword123",
         options: expect.objectContaining({
-          emailRedirectTo: expect.stringMatching(/\/auth\/callback$/),
           data: {
             full_name: "Alex Morgan",
             terms_accepted: true,
@@ -124,8 +123,42 @@ describe("registration form", () => {
         }),
       }),
     );
-    expect(await screen.findByText("Check your inbox")).toBeInTheDocument();
-    expect(screen.getByText("alex@example.com")).toBeInTheDocument();
+    expect(await screen.findByText("Account created")).toBeInTheDocument();
+    expect(
+      screen.queryByText(/verification link|check your inbox/i),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not claim success if Supabase still requires email confirmation", async () => {
+    const user = userEvent.setup();
+    signUp.mockResolvedValue({
+      data: {
+        user: { id: "auth-user-id", identities: [{ id: "identity-id" }] },
+        session: null,
+      },
+      error: null,
+    });
+    render(<RegisterForm />);
+
+    await user.click(screen.getByRole("radio", { name: /job seeker/i }));
+    await user.type(screen.getByLabelText("Full name"), "Alex Morgan");
+    await user.type(screen.getByLabelText("Email address"), "alex@example.com");
+    await user.type(screen.getByLabelText("Password"), "longpassword123");
+    await user.type(
+      screen.getByLabelText("Confirm password"),
+      "longpassword123",
+    );
+    await user.click(
+      screen.getByRole("checkbox", {
+        name: /agree to the terms of service/i,
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: /create account/i }));
+
+    expect(
+      await screen.findByText(/turn off Confirm email in Supabase Auth settings/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Account created")).not.toBeInTheDocument();
   });
 
   it("reports duplicate emails and network errors rather than showing success", async () => {
@@ -192,7 +225,7 @@ describe("registration form", () => {
       | ((value: {
           data: {
             user: { id: string; identities: { id: string }[] };
-            session: null;
+            session: { access_token: string };
           };
           error: null;
         }) => void)
@@ -229,11 +262,11 @@ describe("registration form", () => {
     resolveSignup?.({
       data: {
         user: { id: "signup-test-user", identities: [{ id: "identity" }] },
-        session: null,
+        session: { access_token: "test-access-token" },
       },
       error: null,
     });
-    expect(await screen.findByText("Check your inbox")).toBeInTheDocument();
+    expect(await screen.findByText("Account created")).toBeInTheDocument();
   });
 
   it("submits admin access as a request instead of assuming admin privileges", async () => {
@@ -241,7 +274,7 @@ describe("registration form", () => {
     signUp.mockResolvedValue({
       data: {
         user: { id: "auth-user-id", identities: [{ id: "identity-id" }] },
-        session: null,
+        session: { access_token: "test-access-token" },
       },
       error: null,
     });

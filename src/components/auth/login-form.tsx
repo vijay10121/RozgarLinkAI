@@ -59,7 +59,9 @@ export function LoginForm() {
           <MailCheck aria-hidden="true" />
           <AlertTitle>Email verified</AlertTitle>
           <AlertDescription>
-            Your email is confirmed. Log in to continue.
+            Your email is confirmed. Log in to continue. If you requested
+            administrator access, a current administrator must approve that
+            request separately.
           </AlertDescription>
         </Alert>
       ) : null}

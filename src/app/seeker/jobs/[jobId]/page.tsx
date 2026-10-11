@@ -97,6 +97,24 @@ export default async function SeekerJobDetailPage({
                 Qualifications: {job.required_qualifications.join(", ")}
               </p>
             ) : null}
+            {job.mandatory_education ? (
+              <p className="mt-2 text-sm text-muted-foreground">
+                Mandatory education: {job.mandatory_education}
+              </p>
+            ) : null}
+            {job.location_restrictions.length > 0 ? (
+              <p className="mt-2 text-sm text-muted-foreground">
+                Location restrictions: {job.location_restrictions.join(", ")}
+              </p>
+            ) : null}
+          </section>
+          <section>
+            <h2 className="font-heading text-lg font-semibold">
+              Application instructions
+            </h2>
+            <p className="mt-2 whitespace-pre-line text-sm leading-7 text-muted-foreground">
+              {job.application_instructions || "No additional instructions were provided."}
+            </p>
           </section>
           <SkillSection title="Required skills" skills={job.required_skills} />
           <SkillSection

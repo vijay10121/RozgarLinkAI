@@ -22,7 +22,6 @@ import { createClient } from "@/lib/supabase/client";
 import {
   getRegistrationErrorMessage,
   getRegistrationMetadata,
-  getRegistrationStatus,
   initialRegistrationValues,
   validateRegistration,
   type RegistrationErrors,
@@ -119,11 +118,7 @@ export function RegisterForm() {
   );
   const [errors, setErrors] = useState<RegistrationErrors>({});
   const [requestError, setRequestError] = useState("");
-  const [success, setSuccess] = useState<{
-    email: string;
-    message: string;
-    verified: boolean;
-  } | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPasswords, setShowPasswords] = useState(false);
 
@@ -168,7 +163,6 @@ export function RegisterForm() {
         email: values.email.trim(),
         password: values.password,
         options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
           data: metadata,
         },
       });
@@ -192,22 +186,20 @@ export function RegisterForm() {
         return;
       }
 
-      const status = getRegistrationStatus(
-        Boolean(data.session),
-        values.email.trim(),
-        role,
-      );
+      if (!data.session) {
+        setRequestError(
+          "The account was created, but Supabase is still requiring email confirmation. Ask the project owner to turn off Confirm email in Supabase Auth settings before trying again.",
+        );
+        return;
+      }
 
-      setSuccess({
-        email: status.kind === "email_confirmation" ? status.email : "",
-        verified: status.kind === "email_confirmation",
-        message:
-          role === "admin"
-            ? "Your admin access request has been submitted. Your account will remain a job-seeker account until an existing administrator approves it."
-            : role === "training_provider"
-              ? "Your training-provider account has been created."
-              : "Your job-seeker account has been created.",
-      });
+      setSuccess(
+        role === "admin"
+          ? "Your admin access request has been submitted. Your account will remain a job-seeker account until an existing administrator approves it."
+          : role === "training_provider"
+            ? "Your training-provider account has been created."
+            : "Your job-seeker account has been created.",
+      );
     } catch (error) {
       setRequestError(getRegistrationErrorMessage(error));
     } finally {
@@ -223,22 +215,13 @@ export function RegisterForm() {
         </div>
         <div>
           <p className="text-sm font-semibold uppercase tracking-[0.14em] text-brand">
-            {success.verified ? "One last step" : "You’re on your way"}
+            You’re on your way
           </p>
           <h2 className="mt-2 font-heading text-2xl font-semibold tracking-tight">
-            {success.verified ? "Check your inbox" : "Account created"}
+            Account created
           </h2>
-          {success.verified ? (
-            <p className="mt-3 leading-7 text-muted-foreground">
-              We sent a verification link to{" "}
-              <span className="font-medium text-foreground">
-                {success.email}
-              </span>
-              . Verify your email to finish setting up your account.
-            </p>
-          ) : null}
           <p className="mt-3 leading-7 text-muted-foreground">
-            {success.message}
+            {success}
           </p>
         </div>
         <Link

@@ -100,6 +100,7 @@ describe("seeker profile utilities", () => {
       role: "job_seeker",
       sector: null,
       designation: null,
+      phone: null,
       specialization: null,
       terms_accepted_at: null,
       account_status: "active",

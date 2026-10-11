@@ -51,6 +51,7 @@ src/
 ├── app/                    # App Router pages, root layout, auth callback, and styles
 ├── components/
 │   ├── auth/               # Registration and login forms
+│   ├── admin/              # Admin navigation, job forms, and applicant controls
 │   ├── layout/             # Shared site header and footer
 │   ├── seeker/             # Job-seeker navigation, forms, and cards
 │   ├── states/             # Reusable loading, empty, and error states
@@ -68,9 +69,10 @@ supabase/
 
 Next.js routes and route-level layouts belong under `src/app`. The job-seeker
 workspace is under `src/app/seeker`; shared seeker UI lives in
-`src/components/seeker`. The Python FastAPI service is not part of this
-frontend yet. Eligibility is currently checked by a guarded Supabase database
-function using the candidate's persisted profile.
+`src/components/seeker`. The admin workspace is under `src/app/admin`, with
+shared admin UI in `src/components/admin`. The Python FastAPI service is not
+part of this frontend yet. Eligibility is currently checked by a guarded
+Supabase database function using the candidate's persisted profile.
 
 ## Supabase integration
 
@@ -173,6 +175,29 @@ inquiries are recorded separately and do not represent enrollment. Candidate
 resumes are private and must be downloaded through the authenticated
 `/seeker/profile/resume` route.
 
+The admin interface uses two additional migrations:
+
+- `20261011000600_admin_job_management.sql` adds admin ownership and job
+  application fields, organization contact fields, candidate-safe profile
+  access, job ownership RLS, and application status history. Existing jobs
+  are assigned to their organization's admin where possible.
+- `20261011000700_admin_application_workflows.sql` adds server-side eligibility
+  checks for job education/location restrictions and the
+  `admin_update_application_status` function. It validates status transitions,
+  records the status history, and inserts a notification for the candidate in
+  the same database transaction.
+- `20261011000800_admin_access_request_notifications.sql` requires email
+  confirmation before administrator approval and notifies the applicant after
+  the request is approved or rejected.
+
+Admin job and applicant reads/writes are restricted to active admins and
+organizations whose `created_by` matches the authenticated admin. Closed jobs
+cannot be edited or republished. An admin can edit personal contact fields
+and their own organization's name/contact information, but cannot change
+their role, sector, or verification state. Only platform-level verification
+procedures may change organization verification. The admin app does not
+expose candidate email addresses or private resume files.
+
 Add your local and deployed app URLs to the Supabase Auth redirect URL
 allowlist. Registration email links return to `/auth/callback`, which
 exchanges the confirmation code for a session and then links to the login
@@ -185,7 +210,7 @@ page. The confirmation email template should use Supabase's
 npm run dev       # Start the development server
 npm run lint      # Run ESLint
 npm run typecheck # Run the TypeScript compiler without emitting files
-npm test          # Run authentication and seeker feature tests
+npm test          # Run authentication, seeker, and admin feature tests
 npm run build     # Create a production build
 npm run start     # Serve the production build
 ```
@@ -196,11 +221,26 @@ After Supabase password authentication, the server reads `profiles.role` and
 `profiles.account_status` and routes active accounts to `/seeker/dashboard`,
 `/admin/dashboard`, or `/trainer/dashboard`. Suspended accounts are signed out.
 Missing profiles and profile lookup failures receive explicit login errors.
-Email verification must be completed before Supabase permits password login.
-Use the logout button in the authenticated header to end the server-managed
+To let new users register and log in without confirming email, open the
+Supabase Dashboard and go to **Authentication → Providers → Email** (or the
+Email provider settings). Turn off **Confirm email** and save the change. This
+is a Supabase project setting; application code cannot override it. With
+confirmation enabled, signup returns no session and the registration page
+explains that the setting must be changed rather than claiming the user can log
+in. Use the logout button in the authenticated header to end the server-managed
 Supabase session. The seeker routes require the marketplace migration and real
 published database records; if the migration is unapplied, the seeker error
 boundary offers a retry instead of showing fabricated data.
+
+Email confirmation is not required when the project setting above is disabled,
+but it does not grant administrator privileges. Administrator registration
+creates a pending `admin_access_requests` record
+while the profile remains a job seeker. A current administrator reviews the
+request at `/admin/access-requests`; approval creates an unverified
+organization and changes the applicant profile to `admin`. After approval, the
+applicant should log in again. Pending and rejected applicants receive an
+explicit status page and can still access their job-seeker account. Apply all
+admin migrations with `npx supabase db push` to enable the review workflow.
 
 ## UI foundation
 
