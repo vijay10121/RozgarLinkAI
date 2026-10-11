@@ -17,7 +17,10 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "RozgarLink — Skills to Opportunity",
+  title: {
+    default: "RozgarLink — Skills to Opportunity",
+    template: "%s | RozgarLink",
+  },
   description:
     "A skills-first foundation for connecting job seekers with work and training opportunities.",
 };

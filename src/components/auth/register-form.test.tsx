@@ -1,0 +1,220 @@
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const { signUp } = vi.hoisted(() => ({ signUp: vi.fn() }));
+
+vi.mock("@/lib/supabase/client", () => ({
+  createClient: () => ({
+    auth: { signUp },
+  }),
+}));
+
+import { RegisterForm } from "@/components/auth/register-form";
+
+describe("registration form", () => {
+  beforeEach(() => {
+    signUp.mockReset();
+  });
+
+  it("shows job-seeker fields without a sector selector", async () => {
+    const user = userEvent.setup();
+    render(<RegisterForm />);
+
+    await user.click(screen.getByRole("radio", { name: /job seeker/i }));
+
+    expect(screen.getByLabelText(/Initial location/)).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: /select your sector/i })).toBeNull();
+    expect(screen.getByLabelText("Full name")).toBeInTheDocument();
+  });
+
+  it("shows admin sector and access-request fields", async () => {
+    const user = userEvent.setup();
+    render(<RegisterForm />);
+
+    await user.click(screen.getByRole("radio", { name: /^admin/i }));
+
+    expect(
+      screen.getByRole("group", { name: /select your sector/i }),
+    ).toBeInTheDocument();
+    const privateSector = screen.getByRole("radio", { name: "Private" });
+    await user.click(privateSector);
+    expect(privateSector).toBeChecked();
+    expect(screen.getByLabelText("Organization name")).toBeInTheDocument();
+    expect(screen.getByLabelText("Designation")).toBeInTheDocument();
+    expect(screen.getByText(/administrator privileges are not granted/i)).toBeInTheDocument();
+  });
+
+  it("shows provider specialization and sector options", async () => {
+    const user = userEvent.setup();
+    render(<RegisterForm />);
+
+    await user.click(
+      screen.getByRole("radio", { name: /training provider/i }),
+    );
+
+    expect(screen.getByLabelText("Institute or company name")).toBeInTheDocument();
+    expect(screen.getByLabelText("Area of specialization")).toBeInTheDocument();
+    const governmentSector = screen.getByRole("radio", {
+      name: "Government",
+    });
+    await user.click(governmentSector);
+    expect(governmentSector).toBeChecked();
+    expect(signUp).not.toHaveBeenCalled();
+  });
+
+  it("sends a real Auth signup request and displays the email-confirmation state", async () => {
+    const user = userEvent.setup();
+    signUp.mockResolvedValue({
+      data: {
+        user: { id: "auth-user-id", identities: [{ id: "identity-id" }] },
+        session: null,
+      },
+      error: null,
+    });
+    render(<RegisterForm />);
+
+    await user.click(screen.getByRole("radio", { name: /job seeker/i }));
+    await user.type(screen.getByLabelText("Full name"), "Alex Morgan");
+    await user.type(screen.getByLabelText("Email address"), "alex@example.com");
+    await user.type(screen.getByLabelText("Password"), "longpassword123");
+    await user.type(
+      screen.getByLabelText("Confirm password"),
+      "longpassword123",
+    );
+    await user.click(
+      screen.getByRole("checkbox", {
+        name: /agree to the terms of service/i,
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: /create account/i }));
+
+    expect(signUp).toHaveBeenCalledWith(
+      expect.objectContaining({
+        email: "alex@example.com",
+        password: "longpassword123",
+        options: expect.objectContaining({
+          emailRedirectTo: expect.stringMatching(/\/auth\/callback$/),
+          data: {
+            full_name: "Alex Morgan",
+            terms_accepted: true,
+            account_type: "job_seeker",
+          },
+        }),
+      }),
+    );
+    expect(await screen.findByText("Check your inbox")).toBeInTheDocument();
+    expect(screen.getByText("alex@example.com")).toBeInTheDocument();
+  });
+
+  it("reports duplicate emails and network errors rather than showing success", async () => {
+    const user = userEvent.setup();
+    signUp.mockResolvedValue({
+      data: { user: null, session: null },
+      error: new Error("User already registered"),
+    });
+    render(<RegisterForm />);
+
+    await user.click(screen.getByRole("radio", { name: /job seeker/i }));
+    await user.type(screen.getByLabelText("Full name"), "Alex Morgan");
+    await user.type(screen.getByLabelText("Email address"), "alex@example.com");
+    await user.type(screen.getByLabelText("Password"), "longpassword123");
+    await user.type(
+      screen.getByLabelText("Confirm password"),
+      "longpassword123",
+    );
+    await user.click(
+      screen.getByRole("checkbox", {
+        name: /agree to the terms of service/i,
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: /create account/i }));
+
+    expect(
+      await screen.findByText(/account with this email already exists/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Check your inbox")).toBeNull();
+  });
+
+  it("reports network failures and keeps the form available for retry", async () => {
+    const user = userEvent.setup();
+    signUp.mockRejectedValue(new TypeError("fetch failed"));
+    render(<RegisterForm />);
+
+    await user.click(screen.getByRole("radio", { name: /job seeker/i }));
+    await user.type(screen.getByLabelText("Full name"), "Alex Morgan");
+    await user.type(screen.getByLabelText("Email address"), "alex@example.com");
+    await user.type(screen.getByLabelText("Password"), "longpassword123");
+    await user.type(
+      screen.getByLabelText("Confirm password"),
+      "longpassword123",
+    );
+    await user.click(
+      screen.getByRole("checkbox", {
+        name: /agree to the terms of service/i,
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: /create account/i }));
+
+    expect(
+      await screen.findByText(/couldn’t reach supabase/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Check your inbox")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: /create account/i }),
+    ).toBeEnabled();
+  });
+
+  it("submits admin access as a request instead of assuming admin privileges", async () => {
+    const user = userEvent.setup();
+    signUp.mockResolvedValue({
+      data: {
+        user: { id: "auth-user-id", identities: [{ id: "identity-id" }] },
+        session: null,
+      },
+      error: null,
+    });
+    render(<RegisterForm />);
+
+    await user.click(screen.getByRole("radio", { name: "Admin" }));
+    await user.click(screen.getByRole("radio", { name: "Private" }));
+    await user.type(screen.getByLabelText("Full name"), "Alex Morgan");
+    await user.type(screen.getByLabelText("Email address"), "alex@example.com");
+    await user.type(screen.getByLabelText("Password"), "longpassword123");
+    await user.type(
+      screen.getByLabelText("Confirm password"),
+      "longpassword123",
+    );
+    await user.type(
+      screen.getByLabelText("Organization name"),
+      "Skills Agency",
+    );
+    await user.type(screen.getByLabelText("Designation"), "Coordinator");
+    await user.click(
+      screen.getByRole("checkbox", {
+        name: /agree to the terms of service/i,
+      }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: /request admin access/i }),
+    );
+
+    expect(signUp).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: expect.objectContaining({
+          data: {
+            full_name: "Alex Morgan",
+            terms_accepted: true,
+            account_type: "admin",
+            sector: "private",
+            organization_name: "Skills Agency",
+            designation: "Coordinator",
+          },
+        }),
+      }),
+    );
+    expect(
+      await screen.findByText(/remain a job-seeker account until an existing administrator approves/i),
+    ).toBeInTheDocument();
+  });
+});

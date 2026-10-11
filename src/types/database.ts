@@ -7,6 +7,10 @@ export type Database = {
           role: Database["public"]["Enums"]["application_role"];
           sector: Database["public"]["Enums"]["organization_sector"] | null;
           display_name: string | null;
+          location: string | null;
+          designation: string | null;
+          specialization: string | null;
+          terms_accepted_at: string | null;
           account_status: Database["public"]["Enums"]["account_status"];
           created_at: string;
           updated_at: string;
@@ -16,6 +20,10 @@ export type Database = {
           role?: Database["public"]["Enums"]["application_role"];
           sector?: Database["public"]["Enums"]["organization_sector"] | null;
           display_name?: string | null;
+          location?: string | null;
+          designation?: string | null;
+          specialization?: string | null;
+          terms_accepted_at?: string | null;
           account_status?: Database["public"]["Enums"]["account_status"];
           created_at?: string;
           updated_at?: string;
@@ -25,6 +33,10 @@ export type Database = {
           role?: Database["public"]["Enums"]["application_role"];
           sector?: Database["public"]["Enums"]["organization_sector"] | null;
           display_name?: string | null;
+          location?: string | null;
+          designation?: string | null;
+          specialization?: string | null;
+          terms_accepted_at?: string | null;
           account_status?: Database["public"]["Enums"]["account_status"];
           created_at?: string;
           updated_at?: string;
@@ -69,6 +81,57 @@ export type Database = {
           },
         ];
       };
+      admin_access_requests: {
+        Row: {
+          id: string;
+          user_id: string;
+          requested_sector: Database["public"]["Enums"]["organization_sector"];
+          organization_name: string;
+          designation: string;
+          status: Database["public"]["Enums"]["admin_access_request_status"];
+          reviewed_by: string | null;
+          reviewed_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          requested_sector: Database["public"]["Enums"]["organization_sector"];
+          organization_name: string;
+          designation: string;
+          status?: Database["public"]["Enums"]["admin_access_request_status"];
+          reviewed_by?: string | null;
+          reviewed_at?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          requested_sector?: Database["public"]["Enums"]["organization_sector"];
+          organization_name?: string;
+          designation?: string;
+          status?: Database["public"]["Enums"]["admin_access_request_status"];
+          reviewed_by?: string | null;
+          reviewed_at?: string | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "admin_access_requests_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: true;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "admin_access_requests_reviewed_by_fkey";
+            columns: ["reviewed_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -98,11 +161,19 @@ export type Database = {
         };
         Returns: undefined;
       };
+      admin_review_access_request: {
+        Args: {
+          target_request_id: string;
+          approve: boolean;
+        };
+        Returns: undefined;
+      };
     };
     Enums: {
       application_role: "job_seeker" | "admin" | "training_provider";
       organization_sector: "government" | "private";
       account_status: "active" | "suspended";
+      admin_access_request_status: "pending" | "approved" | "rejected";
     };
     CompositeTypes: Record<string, never>;
   };

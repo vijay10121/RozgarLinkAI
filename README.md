@@ -1,13 +1,13 @@
 # RozgarLink
 
 RozgarLink is a skills-to-opportunity matching platform. This repository
-currently contains the frontend foundation only; authentication workflows,
-job and course data, role-specific dashboards, and matching behavior have not
-been implemented.
+contains the Next.js frontend foundation, Supabase registration/login flow,
+and initial profile/organization schema. Job and course data, role-specific
+dashboards, and matching behavior have not been implemented.
 
 ## Requirements
 
-- Node.js 20.9 or later
+- Node.js 20.19 or later
 - npm
 - A Supabase project for features that use the Supabase client
 
@@ -48,8 +48,9 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ```text
 src/
-├── app/                    # App Router pages, root layout, and global styles
+├── app/                    # App Router pages, root layout, auth callback, and styles
 ├── components/
+│   ├── auth/               # Registration and login forms
 │   ├── layout/             # Shared site header and footer
 │   ├── states/             # Reusable loading, empty, and error states
 │   └── ui/                 # shadcn/ui primitives
@@ -104,9 +105,9 @@ handler or server action. Database access remains subject to RLS.
 
 ### Apply database migrations
 
-The initial schema migration is committed at
-[`supabase/migrations/20261011000100_initial_profiles_and_organizations.sql`](./supabase/migrations/20261011000100_initial_profiles_and_organizations.sql).
-Apply it to a linked Supabase project with the Supabase CLI:
+The schema migrations are committed under
+[`supabase/migrations/`](./supabase/migrations/). Apply them to a linked
+Supabase project with the Supabase CLI:
 
 ```bash
 npx supabase login
@@ -114,16 +115,20 @@ npx supabase link --project-ref YOUR_PROJECT_REF
 npx supabase db push
 ```
 
-Review the migration before applying it to production. It creates the profile
-and organization tables, enables RLS, adds scoped grants and policies, and
-provisions a `job_seeker` profile when an `auth.users` row is created. Only
-the display name is read from user metadata; role, sector, account status,
-and organization verification are never accepted from signup metadata.
+Review the migrations before applying them to production. They create profile
+and organization records, enable RLS, and add scoped grants and policies.
+Supabase Auth creates profiles in a database trigger, so provisioning remains
+atomic even when email confirmation is enabled. Public signup can choose a
+job-seeker or training-provider profile; role and sector values are
+allowlisted by the trigger. Provider organizations are always created
+unverified. Signup cannot set account status or verify an organization.
 
-New users cannot grant themselves privileged roles or verify organizations.
-An active administrator can change roles/status through the
-`admin_update_profile` database function and verify organizations through
-`admin_set_organization_verified`. To bootstrap the first administrator,
+Admin registration submits a request and initially provisions the account as
+a job seeker. An active administrator must approve the request using the
+`admin_review_access_request` database function before the profile gains the
+admin role; approval creates an unverified organization. An active admin can
+also manage profiles with `admin_update_profile` and verify organizations
+with `admin_set_organization_verified`. To bootstrap the first administrator,
 first create and confirm that user's account, then run this once in the
 Supabase SQL Editor using that user's Auth UUID:
 
@@ -137,12 +142,19 @@ Keep the UUID specific to the intended account and run this using a trusted
 project-owner connection, not from the application. All later role and
 verification changes should use the guarded admin functions.
 
+Add your local and deployed app URLs to the Supabase Auth redirect URL
+allowlist. Registration email links return to `/auth/callback`, which
+exchanges the confirmation code for a session and then links to the login
+page. The confirmation email template should use Supabase's
+`{{ .ConfirmationURL }}` so the configured redirect is preserved.
+
 ## Available commands
 
 ```bash
 npm run dev       # Start the development server
 npm run lint      # Run ESLint
 npm run typecheck # Run the TypeScript compiler without emitting files
+npm test          # Run registration validation and UI tests
 npm run build     # Create a production build
 npm run start     # Serve the production build
 ```

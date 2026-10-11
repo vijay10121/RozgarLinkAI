@@ -55,9 +55,9 @@ export default function Home() {
             <div className="mt-9 flex flex-col gap-3 sm:flex-row">
               <Link
                 className={cn(buttonVariants({ size: "lg" }), "gap-2")}
-                href="#platform"
+                href="/register"
               >
-                Explore the foundation
+                Create your account
                 <ArrowRight aria-hidden="true" className="size-4" />
               </Link>
               <Link
@@ -65,9 +65,9 @@ export default function Home() {
                   buttonVariants({ size: "lg", variant: "outline" }),
                   "bg-white/80",
                 )}
-                href="#how-it-starts"
+                href="/login"
               >
-                How it starts
+                Log in
               </Link>
             </div>
           </div>

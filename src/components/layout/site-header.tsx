@@ -19,16 +19,25 @@ export function SiteHeader() {
           aria-label="Main navigation"
           className="order-3 flex w-full items-center gap-5 overflow-x-auto pb-0.5 text-sm font-medium text-muted-foreground sm:order-none sm:w-auto sm:gap-7"
         >
-          <Link className="whitespace-nowrap transition-colors hover:text-foreground" href="#platform">
+          <Link className="whitespace-nowrap transition-colors hover:text-foreground" href="/#platform">
             Platform
           </Link>
-          <Link className="whitespace-nowrap transition-colors hover:text-foreground" href="#how-it-starts">
+          <Link className="whitespace-nowrap transition-colors hover:text-foreground" href="/#how-it-starts">
             Getting started
           </Link>
+          <Link
+            className="whitespace-nowrap transition-colors hover:text-foreground"
+            href="/register"
+          >
+            Create account
+          </Link>
         </nav>
-        <span className="rounded-full border border-border bg-white/70 px-3 py-1 text-xs font-medium text-muted-foreground">
-          Foundation
-        </span>
+        <Link
+          className="rounded-full border border-border bg-white/70 px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:border-brand/40 hover:text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          href="/login"
+        >
+          Log in
+        </Link>
       </div>
     </header>
   );
