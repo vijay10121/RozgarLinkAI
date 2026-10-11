@@ -8,6 +8,10 @@ import { RetryButton } from "@/components/seeker/retry-button";
 import { SeekerPage } from "@/components/seeker/seeker-page";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  getJobEligibility,
+  getSkillGapAnalysis,
+} from "@/lib/matching/server";
 import { requireRole } from "@/lib/supabase/auth";
 import { createClient } from "@/lib/supabase/server";
 
@@ -45,7 +49,8 @@ export default async function SeekerJobDetailPage({
     { data: organization },
     { data: saved },
     { data: existingApplication },
-    { data: eligibility, error: eligibilityError },
+    eligibility,
+    skillGapAnalysis,
   ] = await Promise.all([
     supabase
       .from("organizations")
@@ -64,7 +69,8 @@ export default async function SeekerJobDetailPage({
       .eq("candidate_id", user.id)
       .eq("job_id", job.id)
       .maybeSingle(),
-    supabase.rpc("check_job_eligibility", { target_job_id: job.id }),
+    getJobEligibility(supabase, job.id).catch(() => null),
+    getSkillGapAnalysis(supabase, job.id).catch(() => null),
   ]);
 
   return (
@@ -136,28 +142,101 @@ export default async function SeekerJobDetailPage({
                 </Link>
               </AlertDescription>
             </Alert>
-          ) : eligibilityError ? (
+          ) : !eligibility ? (
             <Alert variant="destructive">
-              <AlertTitle>Eligibility is unavailable</AlertTitle>
+              <AlertTitle>Matching service is unavailable</AlertTitle>
               <AlertDescription>
-                Your application is not enabled until the database eligibility
-                check succeeds. Update your profile and try again.
+                Eligibility could not be verified. Applying is disabled until
+                the matching service is available.
               </AlertDescription>
             </Alert>
-          ) : eligibility?.[0]?.eligible ? (
+          ) : eligibility.status === "eligible" ? (
             <ApplicationForm jobId={job.id} />
           ) : (
             <Alert>
-              <AlertTitle>Eligibility requirements not met</AlertTitle>
+              <AlertTitle>
+                {eligibility.status === "needs_verification"
+                  ? "More profile information is needed"
+                  : "Eligibility requirements not met"}
+              </AlertTitle>
               <AlertDescription>
-                Review the job requirements and update your{" "}
+                {eligibility.reasons.join(" ")} Review your{" "}
                 <Link className="font-semibold underline" href="/seeker/profile">
                   candidate profile
                 </Link>
-                . Eligibility is checked again on submission.
+                . Eligibility is verified again when you submit an application.
               </AlertDescription>
             </Alert>
           )}
+          <section aria-labelledby="eligibility-details-heading">
+            <h2
+              className="font-heading text-lg font-semibold"
+              id="eligibility-details-heading"
+            >
+              Eligibility details
+            </h2>
+            {eligibility ? (
+              <ul className="mt-3 space-y-2 text-sm">
+                {eligibility.criteria.map((criterion) => (
+                  <li className="rounded-lg border border-border p-3" key={criterion.criterion}>
+                    <p className="font-medium">
+                      {criterion.criterion.replaceAll("_", " ")} ·{" "}
+                      {criterion.status.replaceAll("_", " ")}
+                    </p>
+                    <p className="mt-1 text-muted-foreground">{criterion.reason}</p>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-2 text-sm text-muted-foreground">
+                These details are temporarily unavailable.
+              </p>
+            )}
+          </section>
+          <section aria-labelledby="skill-gaps-heading">
+            <h2 className="font-heading text-lg font-semibold" id="skill-gaps-heading">
+              Skill gaps and related training
+            </h2>
+            {!skillGapAnalysis ? (
+              <p className="mt-2 text-sm text-muted-foreground">
+                Skill-gap recommendations are temporarily unavailable.
+              </p>
+            ) : skillGapAnalysis.skill_gaps.length === 0 ? (
+              <p className="mt-2 text-sm text-muted-foreground">
+                No required skill gaps were identified from your profile.
+              </p>
+            ) : (
+              <div className="mt-2 space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  Skills to develop: {skillGapAnalysis.skill_gaps.join(", ")}
+                </p>
+                {skillGapAnalysis.courses.length > 0 ? (
+                  <ul className="space-y-2">
+                    {skillGapAnalysis.courses.map(({ course, matching_skills }) => (
+                      <li className="rounded-lg border border-border p-3" key={course.id}>
+                        <a
+                          className="font-medium text-brand underline-offset-4 hover:underline"
+                          href={course.course_url}
+                          rel="noreferrer"
+                          target="_blank"
+                        >
+                          {course.title}
+                        </a>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          Teaches: {matching_skills.join(", ")}
+                          {course.duration ? ` · ${course.duration}` : ""}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    No published courses currently list these skills.
+                  </p>
+                )}
+              </div>
+            )}
+          </section>
         </CardContent>
       </Card>
     </SeekerPage>

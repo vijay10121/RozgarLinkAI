@@ -3,13 +3,25 @@ import Link from "next/link";
 import { SaveJobButton } from "@/components/seeker/item-actions";
 import { Card, CardContent } from "@/components/ui/card";
 import type { Job, OrganizationSummary } from "@/lib/seeker/data";
+import type { RecommendationJob } from "@/lib/matching/types";
+
+type JobCardData = Pick<
+  Job,
+  | "id"
+  | "title"
+  | "location"
+  | "employment_type"
+  | "required_skills"
+  | "application_deadline"
+> &
+  Partial<Pick<Job, "preferred_skills">>;
 
 export function JobCard({
   job,
   organization,
   saved,
 }: {
-  job: Job;
+  job: JobCardData | RecommendationJob;
   organization?: OrganizationSummary;
   saved: boolean;
 }) {

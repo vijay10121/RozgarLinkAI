@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import { notFound } from "next/navigation";
+import { randomUUID } from "node:crypto";
+import { connection } from "next/server";
 
 import { CourseActions } from "@/components/seeker/course-actions";
 import { SaveCourseButton } from "@/components/seeker/item-actions";
@@ -17,6 +20,7 @@ export default async function SeekerCourseDetailPage({
 }: {
   params: Promise<{ courseId: string }>;
 }) {
+  await connection();
   const { courseId } = await params;
   const { user } = await requireRole("job_seeker");
   const supabase = await createClient();
@@ -58,13 +62,25 @@ export default async function SeekerCourseDetailPage({
     <SeekerPage
       eyebrow="Course details"
       title={course.title}
-      description={`${organization?.name ?? "Training provider"} · ${course.delivery_mode.replaceAll("_", " ")}${course.duration ? ` · ${course.duration}` : ""}`}
+      description={`${organization?.name ?? "Training provider"} · ${course.specialization} · ${course.difficulty_level} · ${course.delivery_mode.replaceAll("_", " ")}${course.duration ? ` · ${course.duration}` : ""}`}
       actions={
         <SaveCourseButton courseId={course.id} saved={Boolean(saved)} />
       }
     >
       <Card>
         <CardContent className="space-y-6 p-5 sm:p-7">
+          {course.image_path ? (
+            <Image
+              alt={`${course.title} course`}
+              className="max-h-80 w-full rounded-lg object-cover"
+              height={600}
+              unoptimized
+              src={supabase.storage
+                .from("training-course-images")
+                .getPublicUrl(course.image_path).data.publicUrl}
+              width={1200}
+            />
+          ) : null}
           <section>
             <h2 className="font-heading text-lg font-semibold">About this course</h2>
             <p className="mt-2 whitespace-pre-line text-sm leading-7 text-muted-foreground">
@@ -94,7 +110,11 @@ export default async function SeekerCourseDetailPage({
               process. Visiting the link or tracking your interest does not
               enroll you.
             </p>
-            <CourseActions courseId={course.id} />
+            <CourseActions
+              courseId={course.id}
+              inquiryRequestId={randomUUID()}
+              linkClickRequestId={randomUUID()}
+            />
           </div>
         </CardContent>
       </Card>

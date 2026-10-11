@@ -1,16 +1,30 @@
 import type { Metadata } from "next";
+import { connection } from "next/server";
 import Link from "next/link";
+import { Suspense } from "react";
 
+import { MarketplaceSchemaNotice } from "@/components/seeker/marketplace-schema-notice";
 import { NotificationReadButton } from "@/components/seeker/notification-read-button";
 import { SeekerPage } from "@/components/seeker/seeker-page";
 import { EmptyState } from "@/components/states/empty-state";
+import { LoadingState } from "@/components/states/loading-state";
 import { Card, CardContent } from "@/components/ui/card";
+import { isMissingMarketplaceSchemaError } from "@/lib/seeker/data";
 import { requireRole } from "@/lib/supabase/auth";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Notifications" };
 
-export default async function SeekerNotificationsPage() {
+export default function SeekerNotificationsPage() {
+  return (
+    <Suspense fallback={<LoadingState label="Loading notifications" />}>
+      <SeekerNotificationsContent />
+    </Suspense>
+  );
+}
+
+async function SeekerNotificationsContent() {
+  await connection();
   const { user } = await requireRole("job_seeker");
   const supabase = await createClient();
 
@@ -20,7 +34,18 @@ export default async function SeekerNotificationsPage() {
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(100);
-  if (error) throw error;
+  if (error) {
+    if (!isMissingMarketplaceSchemaError(error)) throw error;
+    return (
+      <SeekerPage
+        eyebrow="Updates"
+        title="Notifications"
+        description="Account updates delivered to you by RozgarLink."
+      >
+        <MarketplaceSchemaNotice />
+      </SeekerPage>
+    );
+  }
 
   return (
       <SeekerPage

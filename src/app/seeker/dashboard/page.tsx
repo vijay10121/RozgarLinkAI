@@ -8,16 +8,17 @@ import { requireRole } from "@/lib/supabase/auth";
 import { createClient } from "@/lib/supabase/server";
 import {
   getOrganizations,
-  getPublishedJobs,
   isMissingMarketplaceSchemaError,
-  type Job,
 } from "@/lib/seeker/data";
 import { profileCompletion } from "@/lib/seeker/data";
 import { JobCard } from "@/components/seeker/job-card";
 import { JobCourseSearch } from "@/components/seeker/job-search-form";
+import { MarketplaceSchemaNotice } from "@/components/seeker/marketplace-schema-notice";
 import { SeekerPage } from "@/components/seeker/seeker-page";
 import { EmptyState } from "@/components/states/empty-state";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { getJobRecommendations } from "@/lib/matching/server";
+import type { JobRecommendation } from "@/lib/matching/types";
 
 export const metadata: Metadata = { title: "Job seeker dashboard" };
 
@@ -44,16 +45,14 @@ async function SeekerDashboardContent() {
   const { profile, user } = await requireRole("job_seeker");
   const supabase = await createClient();
 
-  let jobs: Job[] = [];
+  let recommendations: JobRecommendation[] = [];
   let applicationTotal = 0;
   let savedIds = new Set<string>();
   let unreadTotal = 0;
   let marketplaceUnavailable = false;
 
   try {
-    const [publishedJobs, applicationCount, savedRows, unreadCount] =
-      await Promise.all([
-        getPublishedJobs(supabase),
+    const [applicationCount, savedRows, unreadCount] = await Promise.all([
         supabase
           .from("applications")
           .select("id", { count: "exact", head: true })
@@ -73,7 +72,6 @@ async function SeekerDashboardContent() {
     if (savedRows.error) throw savedRows.error;
     if (unreadCount.error) throw unreadCount.error;
 
-    jobs = publishedJobs;
     applicationTotal = applicationCount.count ?? 0;
     savedIds = new Set((savedRows.data ?? []).map((row) => row.job_id));
     unreadTotal = unreadCount.count ?? 0;
@@ -82,10 +80,18 @@ async function SeekerDashboardContent() {
     marketplaceUnavailable = true;
   }
 
-  const recommendedJobs = recommendJobs(jobs, profile);
+  let matchingUnavailable = false;
+  if (!marketplaceUnavailable) {
+    try {
+      const result = await getJobRecommendations(supabase);
+      recommendations = result.recommendations;
+    } catch {
+      matchingUnavailable = true;
+    }
+  }
   const organizations = await getOrganizations(
     supabase,
-    recommendedJobs.map((job) => job.organization_id),
+    recommendations.map((recommendation) => recommendation.job.organization_id),
   );
   const completion = profileCompletion(profile);
   const displayName = profile.display_name?.trim() || "there";
@@ -98,19 +104,7 @@ async function SeekerDashboardContent() {
     >
       <JobCourseSearch />
       {marketplaceUnavailable ? (
-        <Alert>
-          <AlertTitle>Marketplace database setup is required</AlertTitle>
-          <AlertDescription>
-            Job, application, saved-item, and notification data is not
-            available because the marketplace migration has not been applied
-            to this Supabase project. From the project folder, link the
-            intended Supabase project if needed, then run{" "}
-            <code className="rounded bg-muted px-1 py-0.5">
-              npx supabase db push
-            </code>
-            . Refresh this page after the migration completes.
-          </AlertDescription>
-        </Alert>
+        <MarketplaceSchemaNotice />
       ) : (
         <div className="grid gap-3 sm:grid-cols-3">
           <SummaryCard
@@ -177,12 +171,11 @@ async function SeekerDashboardContent() {
                 className="font-heading text-xl font-semibold"
                 id="recommended-jobs-heading"
               >
-                {hasJobPreferences(profile) ? "Recommended jobs" : "Published jobs"}
+                Eligible job recommendations
               </h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                {hasJobPreferences(profile)
-                  ? "Selected from published jobs that match your saved role, location, or skill preferences."
-                  : "Add profile preferences to see recommendations tailored to you."}
+                Ranked opportunities include only jobs for which every mandatory
+                requirement is verified as met.
               </p>
             </div>
             <Link
@@ -192,25 +185,38 @@ async function SeekerDashboardContent() {
               View all
             </Link>
           </div>
-          {recommendedJobs.length > 0 ? (
+          {matchingUnavailable ? (
+            <Alert variant="destructive">
+              <AlertTitle>Recommendations are unavailable</AlertTitle>
+              <AlertDescription>
+                The matching service could not verify eligibility. No
+                recommendations are shown; try again later.
+              </AlertDescription>
+            </Alert>
+          ) : recommendations.length > 0 ? (
             <div className="grid gap-3">
-              {recommendedJobs.slice(0, 5).map((job) => (
-                <JobCard
-                  job={job}
-                  key={job.id}
-                  organization={organizations.get(job.organization_id)}
-                  saved={savedIds.has(job.id)}
-                />
+              {recommendations.slice(0, 5).map((recommendation) => (
+                <div className="space-y-2" key={recommendation.job.id}>
+                  <JobCard
+                    job={recommendation.job}
+                    organization={organizations.get(
+                      recommendation.job.organization_id,
+                    )}
+                    saved={savedIds.has(recommendation.job.id)}
+                  />
+                  <p className="px-2 text-xs text-muted-foreground">
+                    Match score {Math.round(recommendation.score * 100)}% ·{" "}
+                    {recommendation.explicit_matches.length} explicit/alias
+                    matches · {recommendation.semantic_matches.length} curated
+                    related-skill matches
+                  </p>
+                </div>
               ))}
             </div>
           ) : (
             <EmptyState
-              title={
-                hasJobPreferences(profile)
-                  ? "No matching published jobs yet"
-                  : "No published jobs are available"
-              }
-              description="We’ll show opportunities here when matching published listings are available."
+              title="No eligible published jobs yet"
+              description="Recommendations appear only when every mandatory job requirement can be verified from your profile."
               action={
                 <Link
                   className="text-sm font-semibold text-brand underline-offset-4 hover:underline"
@@ -224,56 +230,6 @@ async function SeekerDashboardContent() {
         </section>
       ) : null}
     </SeekerPage>
-  );
-}
-
-function recommendJobs<
-  T extends {
-    title: string;
-    location: string;
-    required_skills: string[];
-    preferred_skills: string[];
-  },
->(
-  jobs: T[],
-  profile: {
-    skills?: string[] | null;
-    preferred_roles?: string[] | null;
-    preferred_locations?: string[] | null;
-    location: string | null;
-  },
-): T[] {
-  if (!hasJobPreferences(profile)) return jobs;
-  const terms = [...(profile.preferred_locations ?? []), ...(profile.location ? [profile.location] : [])]
-    .map((value) => value.toLocaleLowerCase());
-  const roles = (profile.preferred_roles ?? []).map((value) => value.toLocaleLowerCase());
-  const skills = (profile.skills ?? []).map((value) => value.toLocaleLowerCase());
-
-  return jobs.filter((job) => {
-    const title = job.title.toLocaleLowerCase();
-    const location = job.location.toLocaleLowerCase();
-    const jobSkills = [...job.required_skills, ...job.preferred_skills].map(
-      (value) => value.toLocaleLowerCase(),
-    );
-    return (
-      terms.some((term) => location.includes(term)) ||
-      roles.some((role) => title.includes(role)) ||
-      skills.some((skill) => jobSkills.includes(skill))
-    );
-  });
-}
-
-function hasJobPreferences(profile: {
-  skills?: string[] | null;
-  preferred_roles?: string[] | null;
-  preferred_locations?: string[] | null;
-  location: string | null;
-}) {
-  return Boolean(
-    profile.skills?.length ||
-      profile.preferred_roles?.length ||
-      profile.preferred_locations?.length ||
-      profile.location?.trim(),
   );
 }
 

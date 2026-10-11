@@ -1,17 +1,33 @@
 import type { Metadata } from "next";
+import { connection } from "next/server";
+import { Suspense } from "react";
 
 import { CourseCard } from "@/components/seeker/course-card";
 import { JobCard } from "@/components/seeker/job-card";
+import { MarketplaceSchemaNotice } from "@/components/seeker/marketplace-schema-notice";
 import { SeekerPage } from "@/components/seeker/seeker-page";
 import { EmptyState } from "@/components/states/empty-state";
+import Link from "next/link";
+import { LoadingState } from "@/components/states/loading-state";
+import {
+  getOrganizations,
+  isMissingMarketplaceSchemaError,
+} from "@/lib/seeker/data";
 import { requireRole } from "@/lib/supabase/auth";
 import { createClient } from "@/lib/supabase/server";
-import { getOrganizations } from "@/lib/seeker/data";
-import Link from "next/link";
 
 export const metadata: Metadata = { title: "Saved opportunities" };
 
-export default async function SavedItemsPage() {
+export default function SavedItemsPage() {
+  return (
+    <Suspense fallback={<LoadingState label="Loading saved opportunities" />}>
+      <SavedItemsContent />
+    </Suspense>
+  );
+}
+
+async function SavedItemsContent() {
+  await connection();
   const { user } = await requireRole("job_seeker");
   const supabase = await createClient();
 
@@ -25,8 +41,21 @@ export default async function SavedItemsPage() {
         .select("course_id")
         .eq("candidate_id", user.id),
   ]);
-  if (savedJobsResult.error) throw savedJobsResult.error;
-  if (savedCoursesResult.error) throw savedCoursesResult.error;
+  const savedItemsError = savedJobsResult.error ?? savedCoursesResult.error;
+  if (savedItemsError) {
+    if (!isMissingMarketplaceSchemaError(savedItemsError)) {
+      throw savedItemsError;
+    }
+    return (
+      <SeekerPage
+        eyebrow="Your collection"
+        title="Saved opportunities"
+        description="Jobs and courses you’ve saved for later."
+      >
+        <MarketplaceSchemaNotice />
+      </SeekerPage>
+    );
+  }
 
   const jobIds = (savedJobsResult.data ?? []).map((item) => item.job_id);
   const courseIds = (savedCoursesResult.data ?? []).map(
@@ -48,13 +77,42 @@ export default async function SavedItemsPage() {
             .eq("status", "published")
         : Promise.resolve({ data: [], error: null }),
   ]);
-  if (jobsResult.error) throw jobsResult.error;
-  if (coursesResult.error) throw coursesResult.error;
+  const listingsError = jobsResult.error ?? coursesResult.error;
+  if (listingsError) {
+    if (!isMissingMarketplaceSchemaError(listingsError)) {
+      throw listingsError;
+    }
+    return (
+      <SeekerPage
+        eyebrow="Your collection"
+        title="Saved opportunities"
+        description="Jobs and courses you’ve saved for later."
+      >
+        <MarketplaceSchemaNotice />
+      </SeekerPage>
+    );
+  }
 
-  const organizations = await getOrganizations(supabase, [
+  let organizations;
+  try {
+    organizations = await getOrganizations(supabase, [
       ...(jobsResult.data ?? []).map((job) => job.organization_id),
       ...(coursesResult.data ?? []).map((course) => course.organization_id),
-  ]);
+    ]);
+  } catch (organizationError) {
+    if (!isMissingMarketplaceSchemaError(organizationError)) {
+      throw organizationError;
+    }
+    return (
+      <SeekerPage
+        eyebrow="Your collection"
+        title="Saved opportunities"
+        description="Jobs and courses you’ve saved for later."
+      >
+        <MarketplaceSchemaNotice />
+      </SeekerPage>
+    );
+  }
   const savedJobIds = new Set(jobIds);
   const savedCourseIds = new Set(courseIds);
 

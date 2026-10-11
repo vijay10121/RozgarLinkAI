@@ -53,12 +53,16 @@ type JobRow = {
 type CourseRow = {
   id: string;
   organization_id: string;
+  owner_provider_id: string | null;
   title: string;
   description: string;
   skills_taught: string[];
+  specialization: string;
+  difficulty_level: "beginner" | "intermediate" | "advanced";
   delivery_mode: "online" | "in_person" | "hybrid";
   duration: string | null;
   course_url: string;
+  image_path: string | null;
   status: "draft" | "published" | "closed";
   published_at: string | null;
   created_at: string;
@@ -107,6 +111,7 @@ export type Database = {
           is_verified: boolean;
           contact_email: string | null;
           contact_phone: string | null;
+          description: string;
           created_at: string;
           updated_at: string;
         };
@@ -118,6 +123,7 @@ export type Database = {
           is_verified?: boolean;
           contact_email?: string | null;
           contact_phone?: string | null;
+          description?: string;
           created_at?: string;
           updated_at?: string;
         };
@@ -129,6 +135,7 @@ export type Database = {
           is_verified?: boolean;
           contact_email?: string | null;
           contact_phone?: string | null;
+          description?: string;
           created_at?: string;
           updated_at?: string;
         };
@@ -228,9 +235,17 @@ export type Database = {
           candidate_id: string;
           course_id: string;
           interaction_type: "link_click" | "inquiry";
+          request_id: string | null;
           created_at: string;
         },
-        never,
+        {
+          id?: string;
+          candidate_id: string;
+          course_id: string;
+          interaction_type: "link_click" | "inquiry";
+          request_id?: string | null;
+          created_at?: string;
+        },
         never
       >;
       notifications: TableDefinition<
@@ -288,6 +303,24 @@ export type Database = {
           interaction: Database["public"]["Enums"]["course_interaction_type"];
         };
         Returns: string;
+      };
+      record_course_interaction_once: {
+        Args: {
+          target_course_id: string;
+          interaction: Database["public"]["Enums"]["course_interaction_type"];
+          request_key: string;
+        };
+        Returns: string;
+      };
+      provider_course_metrics: {
+        Args: Record<string, never>;
+        Returns: {
+          course_id: string;
+          saved_count: number;
+          inquiry_count: number;
+          link_click_count: number;
+          confirmed_enrollment_count: number | null;
+        }[];
       };
       admin_update_application_status: {
         Args: {

@@ -1,16 +1,32 @@
 import type { Metadata } from "next";
+import { connection } from "next/server";
+import { Suspense } from "react";
 import Link from "next/link";
 
+import { MarketplaceSchemaNotice } from "@/components/seeker/marketplace-schema-notice";
 import { SeekerPage } from "@/components/seeker/seeker-page";
 import { EmptyState } from "@/components/states/empty-state";
+import { LoadingState } from "@/components/states/loading-state";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  isMissingMarketplaceSchemaError,
+} from "@/lib/seeker/data";
 import { requireRole } from "@/lib/supabase/auth";
 import { createClient } from "@/lib/supabase/server";
 import { getOrganizations } from "@/lib/seeker/data";
 
 export const metadata: Metadata = { title: "Applied jobs" };
 
-export default async function AppliedJobsPage() {
+export default function AppliedJobsPage() {
+  return (
+    <Suspense fallback={<LoadingState label="Loading applied jobs" />}>
+      <AppliedJobsContent />
+    </Suspense>
+  );
+}
+
+async function AppliedJobsContent() {
+  await connection();
   const { user } = await requireRole("job_seeker");
   const supabase = await createClient();
 
@@ -19,20 +35,58 @@ export default async function AppliedJobsPage() {
       .select("*")
       .eq("candidate_id", user.id)
       .order("submitted_at", { ascending: false });
-  if (error) throw error;
+  if (error) {
+    if (!isMissingMarketplaceSchemaError(error)) throw error;
+    return (
+      <SeekerPage
+        eyebrow="Your activity"
+        title="Applied jobs"
+        description="Review application status updates from the database."
+      >
+        <MarketplaceSchemaNotice />
+      </SeekerPage>
+    );
+  }
 
   const jobIds = [...new Set((applications ?? []).map((item) => item.job_id))];
   const { data: jobs, error: jobsError } =
     jobIds.length > 0
       ? await supabase.from("jobs").select("*").in("id", jobIds)
       : { data: [], error: null };
-  if (jobsError) throw jobsError;
+  if (jobsError) {
+    if (!isMissingMarketplaceSchemaError(jobsError)) throw jobsError;
+    return (
+      <SeekerPage
+        eyebrow="Your activity"
+        title="Applied jobs"
+        description="Review application status updates from the database."
+      >
+        <MarketplaceSchemaNotice />
+      </SeekerPage>
+    );
+  }
 
   const jobById = new Map((jobs ?? []).map((job) => [job.id, job]));
-  const organizations = await getOrganizations(
-    supabase,
-    (jobs ?? []).map((job) => job.organization_id),
-  );
+  let organizations;
+  try {
+    organizations = await getOrganizations(
+      supabase,
+      (jobs ?? []).map((job) => job.organization_id),
+    );
+  } catch (organizationError) {
+    if (!isMissingMarketplaceSchemaError(organizationError)) {
+      throw organizationError;
+    }
+    return (
+      <SeekerPage
+        eyebrow="Your activity"
+        title="Applied jobs"
+        description="Review application status updates from the database."
+      >
+        <MarketplaceSchemaNotice />
+      </SeekerPage>
+    );
+  }
 
   return (
       <SeekerPage

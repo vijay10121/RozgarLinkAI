@@ -117,7 +117,7 @@ drop policy if exists "Users can read their own profile and admins can read all"
 create policy "Users read own profiles and admins read their applicants"
 on public.profiles for select to authenticated
 using (
-  id = (select auth.uid())
+  profiles.id = (select auth.uid())
   or (
     public.is_active_admin()
     and exists (
@@ -125,7 +125,7 @@ using (
       from public.applications a
       join public.jobs j on j.id = a.job_id
       join public.organizations o on o.id = j.organization_id
-      where a.candidate_id = id
+      where a.candidate_id = profiles.id
         and j.owner_admin_id = (select auth.uid())
         and o.created_by = (select auth.uid())
     )

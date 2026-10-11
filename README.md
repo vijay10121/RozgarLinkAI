@@ -70,9 +70,11 @@ supabase/
 Next.js routes and route-level layouts belong under `src/app`. The job-seeker
 workspace is under `src/app/seeker`; shared seeker UI lives in
 `src/components/seeker`. The admin workspace is under `src/app/admin`, with
-shared admin UI in `src/components/admin`. The Python FastAPI service is not
-part of this frontend yet. Eligibility is currently checked by a guarded
-Supabase database function using the candidate's persisted profile.
+shared admin UI in `src/components/admin`. The FastAPI matching service lives in `backend/`. It uses the existing Supabase
+Auth and PostgREST APIs with the caller's verified access token and RLS; it does
+not add another database or use a service-role key. Job applications still pass
+through the existing atomic database RPC after the matching API confirms
+eligibility.
 
 ## Supabase integration
 
@@ -158,6 +160,99 @@ Keep the UUID specific to the intended account and run this using a trusted
 project-owner connection, not from the application. All later role and
 verification changes should use the guarded admin functions.
 
+## Matching API (FastAPI)
+
+The matching API reads the authenticated candidate's profile and published
+jobs/courses from the same Supabase project. It derives the candidate ID and
+role from Supabase Auth and the RLS-protected `profiles` row; callers cannot
+submit a role or candidate ID. No service-role key is required or accepted.
+
+Requirements: Python 3.11 or later. Start the API in a second terminal:
+
+```powershell
+cd backend
+py -3.11 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+Copy-Item .env.example .env
+pip install -r requirements.txt
+uvicorn app.main:app --reload --env-file .env
+```
+
+On POSIX shells:
+
+```bash
+cd backend
+python3.11 -m venv .venv
+source .venv/bin/activate
+cp .env.example .env
+pip install -r requirements.txt
+uvicorn app.main:app --reload --env-file .env
+```
+
+Set `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` in `backend/.env` from the
+same project configured for Next.js. Use only the public publishable key;
+never put a service-role key in this environment or expose a private backend
+URL via a `NEXT_PUBLIC_*` variable. Set `MATCHING_API_URL` in the Next.js
+`.env.local` to the reachable server-to-server API URL. Restart both servers
+after changing environment variables.
+
+Endpoints:
+
+- `GET /healthz` — secret-free process health.
+- `GET /v1/jobs/{job_id}/eligibility` — candidate-scoped, criterion-level
+  `eligible`, `ineligible`, or `needs_verification`.
+- `GET /v1/recommendations/jobs` — personalized rankings limited to jobs whose
+  mandatory eligibility is fully verified.
+- `GET /v1/jobs/{job_id}/skill-gaps` — required skill gaps and matching
+  published course records.
+
+Protected endpoints require `Authorization: Bearer <Supabase access token>`.
+The token is checked with Supabase Auth, and profile/job/course reads use that
+same caller token so existing RLS policies remain authoritative. Open
+`http://127.0.0.1:8000/docs` for the local OpenAPI reference.
+
+Eligibility is deterministic: a demonstrated failed requirement yields
+`ineligible`, while missing mandatory profile evidence yields
+`needs_verification`; neither state can be promoted by a skill score. The
+skill-alias dictionary equates only curated aliases for mandatory skill
+checks. Ranking separately reports explicit/alias matches and curated
+related-skill matches. The latter uses the hand-maintained concept groups in
+`backend/app/skills.py` (not an embedding model); adjust the configurable
+`MATCHING_WEIGHT_*` values only when the ranking behavior is intentionally
+changed. The current frontend does not cache matching results, so subsequent
+requests recalculate after a profile update. The application server action
+checks the API again and then invokes the existing atomic `apply_to_job` RPC.
+If the API is unavailable or eligibility is not fully verified, submission is
+blocked.
+
+The existing atomic `apply_to_job` database guard uses exact skill-name
+comparison. Migration
+[`20261011001000_matching_skill_aliases.sql`](./supabase/migrations/20261011001000_matching_skill_aliases.sql)
+updates that guard to use the same curated aliases for its final transactional
+recheck. It adds only an immutable normalization function and replaces the
+eligibility function; it does not change tables, RLS policies, grants on
+existing functions, or stored records. Apply it through the reviewed migration
+workflow before enabling alias-based applications in a deployed environment.
+No remote database migration was applied as part of this implementation. The
+repository also has the previously pending training-provider migration
+`20261011000900_training_provider_workspace.sql`; review both pending files and
+their sequence before any remote push.
+
+Run matching tests from the `backend` directory:
+
+```bash
+pytest
+```
+
+Run frontend verification from the repository root:
+
+```bash
+npm run typecheck
+npm run lint
+npm test
+npm run build
+```
+
 The marketplace migration
 [`20261011000500_job_seeker_marketplace.sql`](./supabase/migrations/20261011000500_job_seeker_marketplace.sql)
 adds candidate profile preferences, published jobs and courses, saved items,
@@ -189,6 +284,21 @@ The admin interface uses two additional migrations:
 - `20261011000800_admin_access_request_notifications.sql` requires email
   confirmation before administrator approval and notifies the applicant after
   the request is approved or rejected.
+
+The training-provider workspace migration
+[`20261011000900_training_provider_workspace.sql`](./supabase/migrations/20261011000900_training_provider_workspace.sql)
+adds provider ownership and course details, organization descriptions,
+ownership-scoped course write policies, idempotent learner interaction keys,
+aggregate-only provider metrics, publication notifications, and a public
+course-image bucket whose writes are restricted to each authenticated
+provider's own folder. Apply it to the intended linked project with
+`npx supabase db push` after reviewing it. Provider-created courses can be
+published directly; no course-review workflow is configured. In the existing
+database enum, `closed` is presented to providers as **Archived** and cannot be
+edited or republished. Course metrics count current saved-course rows and
+recorded inquiry/link-click events; duplicate requests with the same
+per-page action key count once. Confirmed enrollments are not tracked because
+there is no platform or trusted enrollment integration.
 
 Admin job and applicant reads/writes are restricted to active admins and
 organizations whose `created_by` matches the authenticated admin. Closed jobs

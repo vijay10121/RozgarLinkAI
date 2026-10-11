@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
+import { getJobEligibility } from "@/lib/matching/server";
 import { requireRole } from "@/lib/supabase/auth";
 import { splitUniqueList } from "@/lib/seeker/data";
 
@@ -153,23 +154,18 @@ export async function applyToJobAction(
   if (!jobId) return { error: "This job link is invalid." };
 
   const { supabase } = await requireRole("job_seeker");
-  const { data: eligibility, error: eligibilityError } = await supabase.rpc(
-    "check_job_eligibility",
-    { target_job_id: jobId },
-  );
-
-  if (eligibilityError) {
+  let eligibility: Awaited<ReturnType<typeof getJobEligibility>>;
+  try {
+    eligibility = await getJobEligibility(supabase, jobId);
+  } catch {
     return {
       error:
-        "Eligibility could not be verified. Update your profile or try again later.",
+        "Eligibility could not be verified because the matching service is unavailable. Please try again later.",
     };
   }
 
-  const result = eligibility?.[0];
-  if (!result?.eligible) {
-    return {
-      error: describeEligibilityReasons(result?.reasons ?? []),
-    };
+  if (eligibility.status !== "eligible") {
+    return { error: describeEligibilityReasons(eligibility.reasons, eligibility.status) };
   }
 
   const { error: applicationError } = await supabase.rpc("apply_to_job", {
@@ -196,21 +192,14 @@ export async function applyToJobAction(
   return { success: "Your application was submitted." };
 }
 
-function describeEligibilityReasons(reasons: string[]): string {
-  const messages: string[] = [];
-  if (reasons.includes("missing_required_skills")) {
-    messages.push("your profile is missing one or more required skills");
-  }
-  if (reasons.includes("missing_required_qualifications")) {
-    messages.push("your profile is missing one or more required qualifications");
-  }
-  if (reasons.includes("insufficient_experience")) {
-    messages.push("your profile does not meet the required experience");
-  }
-
-  return messages.length > 0
-    ? `You’re not eligible to apply yet: ${messages.join("; ")}.`
-    : "You’re not eligible to apply for this job.";
+function describeEligibilityReasons(
+  reasons: string[],
+  status: "ineligible" | "needs_verification",
+): string {
+  const detail = reasons.length > 0 ? ` ${reasons.join(" ")}` : "";
+  return status === "needs_verification"
+    ? `Eligibility needs verification. Complete or clarify your profile before applying.${detail}`
+    : `You’re not eligible to apply for this job.${detail}`;
 }
 
 export async function markNotificationReadAction(
@@ -240,12 +229,16 @@ export async function recordCourseInterestAction(
   formData: FormData,
 ): Promise<SeekerActionState> {
   const courseId = readUuid(formData, "course_id");
-  if (!courseId) return { error: "This course link is invalid." };
+  const requestId = readUuid(formData, "request_id");
+  if (!courseId || !requestId) {
+    return { error: "This course interaction is invalid. Please refresh." };
+  }
 
   const { supabase } = await requireRole("job_seeker");
-  const { error } = await supabase.rpc("record_course_interaction", {
+  const { error } = await supabase.rpc("record_course_interaction_once", {
     target_course_id: courseId,
     interaction: "inquiry",
+    request_key: requestId,
   });
 
   if (error) return actionError();
@@ -344,7 +337,10 @@ export async function clearResumeAction(
 
 export async function visitCourseAction(formData: FormData): Promise<never> {
   const courseId = readUuid(formData, "course_id");
-  if (!courseId) redirect("/seeker/courses?error=course_unavailable");
+  const requestId = readUuid(formData, "request_id");
+  if (!courseId || !requestId) {
+    redirect("/seeker/courses?error=course_unavailable");
+  }
 
   const { supabase } = await requireRole("job_seeker");
   const { data: course, error: courseError } = await supabase
@@ -369,8 +365,12 @@ export async function visitCourseAction(formData: FormData): Promise<never> {
   }
 
   const { error: interactionError } = await supabase.rpc(
-    "record_course_interaction",
-    { target_course_id: courseId, interaction: "link_click" },
+    "record_course_interaction_once",
+    {
+      target_course_id: courseId,
+      interaction: "link_click",
+      request_key: requestId,
+    },
   );
   if (interactionError) redirect("/seeker/courses?error=course_unavailable");
 

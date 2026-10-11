@@ -25,6 +25,7 @@ export function CourseCard({
           </Link>
           <p className="mt-1 text-sm text-muted-foreground">
             {organization?.name ?? "Provider details unavailable"} ·{" "}
+            {course.specialization} · {course.difficulty_level} ·{" "}
             {course.delivery_mode.replaceAll("_", " ")}
             {course.duration ? ` · ${course.duration}` : ""}
           </p>

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   requireRole: vi.fn(),
   revalidatePath: vi.fn(),
+  getJobEligibility: vi.fn(),
 }));
 
 vi.mock("@/lib/supabase/auth", () => ({
@@ -13,9 +14,14 @@ vi.mock("next/cache", () => ({
   revalidatePath: mocks.revalidatePath,
 }));
 
+vi.mock("@/lib/matching/server", () => ({
+  getJobEligibility: mocks.getJobEligibility,
+}));
+
 import {
   applyToJobAction,
   markNotificationReadAction,
+  recordCourseInterestAction,
   toggleSavedJobAction,
   updateSeekerProfileAction,
 } from "@/app/seeker/actions";
@@ -189,6 +195,24 @@ describe("seeker server actions", () => {
     expect(query.eq).toHaveBeenCalledWith("id", userId);
   });
 
+  it("records course inquiries using a request key for idempotent event counting", async () => {
+    const { supabase } = setupActionClient();
+    supabase.rpc.mockResolvedValue({ error: null });
+    const requestId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+    const formData = new FormData();
+    formData.set("course_id", jobId);
+    formData.set("request_id", requestId);
+
+    const result = await recordCourseInterestAction({}, formData);
+
+    expect(result.success).toMatch(/not an enrollment confirmation/i);
+    expect(supabase.rpc).toHaveBeenCalledWith("record_course_interaction_once", {
+      target_course_id: jobId,
+      interaction: "inquiry",
+      request_key: requestId,
+    });
+  });
+
   it("rejects out-of-range profile updates before database access", async () => {
     const formData = new FormData();
     formData.set("experience_years", "81");
@@ -219,42 +243,75 @@ describe("seeker server actions", () => {
 
   it("does not report success when the database rejects a duplicate application", async () => {
     const { supabase } = setupActionClient();
-    supabase.rpc
-      .mockResolvedValueOnce({
-        data: [{ eligible: true, reasons: [] }],
-        error: null,
-      })
-      .mockResolvedValueOnce({
-        data: null,
-        error: { code: "23505" },
-      });
+    mocks.getJobEligibility.mockResolvedValue({
+      job_id: jobId,
+      status: "eligible",
+      criteria: [],
+      reasons: [],
+      skill_gaps: [],
+    });
+    supabase.rpc.mockResolvedValueOnce({
+      data: null,
+      error: { code: "23505" },
+    });
     const formData = new FormData();
     formData.set("job_id", jobId);
 
     const result = await applyToJobAction({}, formData);
 
     expect(result).toEqual({ error: "You have already applied to this job." });
-    expect(supabase.rpc).toHaveBeenNthCalledWith(1, "check_job_eligibility", {
-      target_job_id: jobId,
-    });
-    expect(supabase.rpc).toHaveBeenNthCalledWith(2, "apply_to_job", {
+    expect(mocks.getJobEligibility).toHaveBeenCalledWith(supabase, jobId);
+    expect(supabase.rpc).toHaveBeenCalledWith("apply_to_job", {
       target_job_id: jobId,
     });
   });
 
   it("does not submit an application when the server eligibility check fails", async () => {
     const { supabase } = setupActionClient();
-    supabase.rpc.mockResolvedValueOnce({
-      data: [{ eligible: false, reasons: ["missing_required_skills"] }],
-      error: null,
+    mocks.getJobEligibility.mockResolvedValue({
+      job_id: jobId,
+      status: "ineligible",
+      criteria: [],
+      reasons: ["Missing required skills: TypeScript."],
+      skill_gaps: ["TypeScript"],
     });
     const formData = new FormData();
     formData.set("job_id", jobId);
 
     const result = await applyToJobAction({}, formData);
 
-    expect(result.error).toContain("missing one or more required skills");
-    expect(supabase.rpc).toHaveBeenCalledTimes(1);
+    expect(result.error).toContain("Missing required skills: TypeScript.");
+    expect(supabase.rpc).not.toHaveBeenCalled();
+  });
+
+  it("does not allow applications while mandatory profile data needs verification", async () => {
+    const { supabase } = setupActionClient();
+    mocks.getJobEligibility.mockResolvedValue({
+      job_id: jobId,
+      status: "needs_verification",
+      criteria: [],
+      reasons: ["The candidate profile does not provide skill evidence."],
+      skill_gaps: ["Python"],
+    });
+    const formData = new FormData();
+    formData.set("job_id", jobId);
+
+    const result = await applyToJobAction({}, formData);
+
+    expect(result.error).toContain("Eligibility needs verification.");
+    expect(supabase.rpc).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when the matching API cannot verify eligibility", async () => {
+    const { supabase } = setupActionClient();
+    mocks.getJobEligibility.mockRejectedValue(new Error("offline"));
+    const formData = new FormData();
+    formData.set("job_id", jobId);
+
+    const result = await applyToJobAction({}, formData);
+
+    expect(result.error).toContain("matching service is unavailable");
+    expect(supabase.rpc).not.toHaveBeenCalled();
   });
 
   it("rejects application actions when the server role check fails", async () => {

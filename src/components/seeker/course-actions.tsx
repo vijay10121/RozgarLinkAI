@@ -11,7 +11,15 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 
-export function CourseActions({ courseId }: { courseId: string }) {
+export function CourseActions({
+  courseId,
+  inquiryRequestId,
+  linkClickRequestId,
+}: {
+  courseId: string;
+  inquiryRequestId: string;
+  linkClickRequestId: string;
+}) {
   const [state, formAction, pending] = useActionState<
     SeekerActionState,
     FormData
@@ -31,6 +39,7 @@ export function CourseActions({ courseId }: { courseId: string }) {
       ) : null}
       <form action={visitCourseAction}>
         <input name="course_id" type="hidden" value={courseId} />
+        <input name="request_id" type="hidden" value={linkClickRequestId} />
         <Button className="gap-2" type="submit">
           <ExternalLink aria-hidden="true" className="size-4" />
           Visit provider course page
@@ -38,6 +47,7 @@ export function CourseActions({ courseId }: { courseId: string }) {
       </form>
       <form action={formAction}>
         <input name="course_id" type="hidden" value={courseId} />
+        <input name="request_id" type="hidden" value={inquiryRequestId} />
         <Button disabled={pending} type="submit" variant="outline">
           {pending ? (
             <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />

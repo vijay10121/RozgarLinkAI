@@ -11,11 +11,11 @@ import {
   searchPublishedJobs,
 } from "@/lib/seeker/data";
 import { JobCard } from "@/components/seeker/job-card";
+import { MarketplaceSchemaNotice } from "@/components/seeker/marketplace-schema-notice";
 import { SeekerPage } from "@/components/seeker/seeker-page";
 import { EmptyState } from "@/components/states/empty-state";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 export const metadata: Metadata = { title: "Find jobs" };
 
@@ -163,18 +163,7 @@ async function SeekerJobsContent({
         </form>
 
         {marketplaceUnavailable ? (
-          <Alert>
-            <AlertTitle>Marketplace database setup is required</AlertTitle>
-            <AlertDescription>
-              Published jobs are unavailable because the marketplace migration
-              has not been applied to this Supabase project. From the project
-              folder, link the intended project if needed and run{" "}
-              <code className="rounded bg-muted px-1 py-0.5">
-                npx supabase db push
-              </code>
-              , then refresh this page.
-            </AlertDescription>
-          </Alert>
+          <MarketplaceSchemaNotice />
         ) : jobs.length > 0 ? (
           <p className="text-sm text-muted-foreground">
             {jobs.length} published {jobs.length === 1 ? "job" : "jobs"} shown
