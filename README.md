@@ -238,6 +238,24 @@ repository also has the previously pending training-provider migration
 `20261011000900_training_provider_workspace.sql`; review both pending files and
 their sequence before any remote push.
 
+Further integration migrations:
+
+- `20261011001100_application_owner_notifications.sql` inserts an in-app alert
+  for the active owning admin in the same transaction as each new application.
+  The application's existing unique `(candidate_id, job_id)` constraint
+  prevents duplicate application events.
+- `20261011001200_candidate_job_alert_preferences.sql` adds
+  `profiles.job_alerts_enabled` (opt-in, default off) and sends one in-app
+  notification for a job when it is first created/published or transitions
+  from draft to published. Matching uses the candidate's saved role,
+  location, or curated skill aliases. Closing/re-editing an already published
+  job does not re-notify candidates.
+
+The migration order is 009 (provider ownership/schema), 010 (matching skill
+aliases), then 011 and 012 (application and opt-in publication notifications).
+No notification recipient preferences are inferred for existing users:
+everyone remains opted out until they enable alerts in their seeker profile.
+
 Run matching tests from the `backend` directory:
 
 ```bash

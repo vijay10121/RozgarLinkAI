@@ -390,7 +390,6 @@ def test_course_recommendations_only_use_published_matching_courses(client):
             "course_url": "https://example.test/course",
             "delivery_mode": "online",
             "duration": "4 weeks",
-            "specialization": "Databases",
         },
         {
             "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
@@ -401,7 +400,6 @@ def test_course_recommendations_only_use_published_matching_courses(client):
             "course_url": "https://example.test/draft",
             "delivery_mode": "online",
             "duration": None,
-            "specialization": "",
         },
     ]
     response = test_client.get(

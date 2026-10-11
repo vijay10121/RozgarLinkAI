@@ -116,6 +116,7 @@ describe("seeker profile utilities", () => {
       experience_years: null,
       preferred_roles: [],
       preferred_locations: [],
+      job_alerts_enabled: false,
       resume_path: null,
       created_at: "",
       updated_at: "",
@@ -193,6 +194,19 @@ describe("seeker server actions", () => {
       }),
     );
     expect(query.eq).toHaveBeenCalledWith("id", userId);
+  });
+
+  it("stores the candidate's opt-in job alert preference", async () => {
+    const { query } = setupActionClient();
+    const formData = new FormData();
+    formData.set("job_alerts_enabled", "on");
+
+    const result = await updateSeekerProfileAction({}, formData);
+
+    expect(result.success).toBe("Your profile has been saved.");
+    expect(query.update).toHaveBeenCalledWith(
+      expect.objectContaining({ job_alerts_enabled: true }),
+    );
   });
 
   it("records course inquiries using a request key for idempotent event counting", async () => {

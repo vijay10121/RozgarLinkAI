@@ -61,6 +61,7 @@ export async function updateSeekerProfileAction(
       preferred_locations: splitUniqueList(
         formData.get("preferred_locations"),
       ),
+      job_alerts_enabled: formData.get("job_alerts_enabled") === "on",
     })
     .eq("id", user.id);
 

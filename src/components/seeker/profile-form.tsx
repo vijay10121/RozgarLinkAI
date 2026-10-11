@@ -106,6 +106,27 @@ export function ProfileForm({ profile }: { profile: SeekerProfile }) {
           value={asText(profile.preferred_locations)}
           hint="Separate entries with commas or new lines."
         />
+        <div className="flex items-start gap-3 sm:col-span-2">
+          <input
+            className="mt-1 size-4 accent-brand"
+            defaultChecked={profile.job_alerts_enabled}
+            id="profile-job-alerts"
+            name="job_alerts_enabled"
+            type="checkbox"
+          />
+          <div>
+            <label
+              className="text-sm font-medium"
+              htmlFor="profile-job-alerts"
+            >
+              In-app alerts for matching published jobs
+            </label>
+            <p className="mt-1 text-xs text-muted-foreground">
+              We’ll add an in-app notification when a new job matches your
+              saved role, location, or skill preferences.
+            </p>
+          </div>
+        </div>
       </div>
       <Button className="gap-2" disabled={pending} type="submit">
         {pending ? (

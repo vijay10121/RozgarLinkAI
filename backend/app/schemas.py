@@ -62,7 +62,6 @@ class Course(BaseModel):
     course_url: str
     delivery_mode: str
     duration: str | None = None
-    specialization: str = ""
 
 
 class CriterionResult(BaseModel):

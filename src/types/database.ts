@@ -22,6 +22,7 @@ type ProfileRow = {
   experience_years: number | null;
   preferred_roles: string[];
   preferred_locations: string[];
+  job_alerts_enabled: boolean;
   resume_path: string | null;
   created_at: string;
   updated_at: string;

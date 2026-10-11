@@ -22,6 +22,10 @@ class Settings:
             raise RuntimeError(
                 "Set SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY for the matching API."
             )
+        if not url.startswith("https://") and not url.startswith(
+            "http://127.0.0.1"
+        ) and not url.startswith("http://localhost"):
+            raise RuntimeError("SUPABASE_URL must use HTTPS outside local development.")
         if key.startswith("sb_secret_") or _is_service_role_jwt(key):
             raise RuntimeError(
                 "SUPABASE_PUBLISHABLE_KEY must not contain a service-role key."
