@@ -6,6 +6,8 @@ import {
   BriefcaseBusiness,
   Building2,
   Check,
+  Eye,
+  EyeOff,
   GraduationCap,
   LoaderCircle,
   ShieldCheck,
@@ -98,7 +100,12 @@ function Field({
       </label>
       {children}
       {error ? (
-        <p className="text-sm text-destructive" id={`${id}-error`}>
+        <p
+          aria-live="polite"
+          className="text-sm text-destructive"
+          id={`${id}-error`}
+          role="alert"
+        >
           {error}
         </p>
       ) : null}
@@ -118,6 +125,7 @@ export function RegisterForm() {
     verified: boolean;
   } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPasswords, setShowPasswords] = useState(false);
 
   function update<K extends keyof RegistrationValues>(
     field: K,
@@ -128,8 +136,19 @@ export function RegisterForm() {
     setRequestError("");
   }
 
+  function selectRole(role: RegistrationRole) {
+    setValues((current) => ({
+      ...current,
+      role,
+      sector: role === "job_seeker" ? "" : current.sector,
+    }));
+    setErrors({});
+    setRequestError("");
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isSubmitting) return;
     setRequestError("");
 
     const validationErrors = validateRegistration(values);
@@ -244,8 +263,14 @@ export function RegisterForm() {
         </Alert>
       ) : null}
 
-      <fieldset className="space-y-3">
-        <legend className="mb-3 text-sm font-semibold text-foreground">
+      <fieldset
+        aria-describedby={errors.role ? "role-error" : undefined}
+        aria-invalid={Boolean(errors.role)}
+        className="space-y-3"
+      >
+        <legend
+          className="mb-3 text-sm font-semibold text-foreground"
+        >
           1. Choose an account type
         </legend>
         <div className="grid gap-3 sm:grid-cols-3">
@@ -254,7 +279,7 @@ export function RegisterForm() {
             return (
               <label
                 className={cn(
-                  "group relative flex min-h-32 cursor-pointer flex-col rounded-xl border bg-card p-4 text-left shadow-sm transition-all hover:border-brand/50 hover:shadow-md",
+                  "group relative flex min-h-32 cursor-pointer flex-col rounded-xl border bg-card p-4 text-left shadow-sm transition-all hover:border-brand/50 hover:shadow-md has-[:focus-visible]:outline-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring has-[:focus-visible]:ring-offset-2",
                   selected
                     ? "border-brand bg-brand-soft/50 ring-2 ring-brand/15"
                     : "border-border",
@@ -263,13 +288,16 @@ export function RegisterForm() {
               >
                 <input
                   aria-label={title}
-                  aria-describedby={
-                    value === "admin" ? "admin-request-note" : undefined
-                  }
+                  aria-describedby={[
+                    errors.role ? "role-error" : "",
+                    value === "admin" ? "admin-request-note" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ") || undefined}
                   checked={selected}
                   className="peer sr-only"
                   name="accountType"
-                  onChange={() => update("role", value)}
+                  onChange={() => selectRole(value)}
                   type="radio"
                   value={value}
                 />
@@ -303,7 +331,14 @@ export function RegisterForm() {
           })}
         </div>
         {errors.role ? (
-          <p className="text-sm text-destructive">{errors.role}</p>
+          <p
+            aria-live="polite"
+            className="text-sm text-destructive"
+            id="role-error"
+            role="alert"
+          >
+            {errors.role}
+          </p>
         ) : null}
         {values.role === "admin" ? (
           <p
@@ -321,8 +356,14 @@ export function RegisterForm() {
         <>
           {(values.role === "admin" ||
             values.role === "training_provider") && (
-            <fieldset className="space-y-3">
-              <legend className="mb-3 text-sm font-semibold text-foreground">
+            <fieldset
+              aria-describedby={errors.sector ? "sector-error" : undefined}
+              aria-invalid={Boolean(errors.sector)}
+              className="space-y-3"
+            >
+              <legend
+                className="mb-3 text-sm font-semibold text-foreground"
+              >
                 2. Select your sector
               </legend>
               <div className="grid gap-3 sm:grid-cols-2">
@@ -331,7 +372,7 @@ export function RegisterForm() {
                   return (
                     <label
                       className={cn(
-                        "flex cursor-pointer items-center gap-3 rounded-xl border bg-card p-4 transition-all hover:border-brand/50",
+                        "flex cursor-pointer items-center gap-3 rounded-xl border bg-card p-4 transition-all hover:border-brand/50 has-[:focus-visible]:outline-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring has-[:focus-visible]:ring-offset-2",
                         selected
                           ? "border-brand bg-brand-soft/50 ring-2 ring-brand/15"
                           : "border-border",
@@ -340,6 +381,9 @@ export function RegisterForm() {
                     >
                       <input
                         aria-label={title}
+                        aria-describedby={
+                          errors.sector ? "sector-error" : undefined
+                        }
                         checked={selected}
                         className="size-4 accent-[var(--brand)]"
                         name="sector"
@@ -363,7 +407,14 @@ export function RegisterForm() {
                 })}
               </div>
               {errors.sector ? (
-                <p className="text-sm text-destructive">{errors.sector}</p>
+                <p
+                  aria-live="polite"
+                  className="text-sm text-destructive"
+                  id="sector-error"
+                  role="alert"
+                >
+                  {errors.sector}
+                </p>
               ) : null}
             </fieldset>
           )}
@@ -395,7 +446,7 @@ export function RegisterForm() {
                     onChange={(event) =>
                       update("fullName", event.target.value)
                     }
-                    placeholder="Alex Morgan"
+                    placeholder="Your full name"
                     value={values.fullName}
                   />
                 </Field>
@@ -425,24 +476,39 @@ export function RegisterForm() {
                 id="password"
                 label="Password"
               >
-                <Input
-                  autoComplete="new-password"
-                  aria-describedby={
-                    errors.password ? "password-error" : "password-hint"
-                  }
-                  aria-invalid={Boolean(errors.password)}
-                  className="h-11 bg-background"
-                  id="password"
-                  maxLength={128}
-                  minLength={10}
-                  name="password"
-                  onChange={(event) =>
-                    update("password", event.target.value)
-                  }
-                  placeholder="At least 10 characters"
-                  type="password"
-                  value={values.password}
-                />
+                <div className="relative">
+                  <Input
+                    autoComplete="new-password"
+                    aria-describedby={
+                      errors.password ? "password-error" : "password-hint"
+                    }
+                    aria-invalid={Boolean(errors.password)}
+                    className="h-11 bg-background pr-12"
+                    id="password"
+                    maxLength={128}
+                    minLength={10}
+                    name="password"
+                    onChange={(event) =>
+                      update("password", event.target.value)
+                    }
+                    placeholder="At least 10 characters"
+                    type={showPasswords ? "text" : "password"}
+                    value={values.password}
+                  />
+                  <button
+                    aria-label={showPasswords ? "Hide passwords" : "Show passwords"}
+                    aria-pressed={showPasswords}
+                    className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-md text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    onClick={() => setShowPasswords((visible) => !visible)}
+                    type="button"
+                  >
+                    {showPasswords ? (
+                      <EyeOff aria-hidden="true" className="size-4" />
+                    ) : (
+                      <Eye aria-hidden="true" className="size-4" />
+                    )}
+                  </button>
+                </div>
                 <p
                   className="text-xs leading-5 text-muted-foreground"
                   id="password-hint"
@@ -472,7 +538,7 @@ export function RegisterForm() {
                     update("confirmPassword", event.target.value)
                   }
                   placeholder="Enter your password again"
-                  type="password"
+                  type={showPasswords ? "text" : "password"}
                   value={values.confirmPassword}
                 />
               </Field>
@@ -622,7 +688,7 @@ export function RegisterForm() {
                   }
                   aria-invalid={Boolean(errors.termsAccepted)}
                   checked={values.termsAccepted}
-                  className="mt-1 size-4 shrink-0 accent-[var(--brand)]"
+                  className="mt-1 size-4 shrink-0 accent-[var(--brand)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   name="termsAccepted"
                   onChange={(event) =>
                     update("termsAccepted", event.target.checked)
@@ -635,7 +701,11 @@ export function RegisterForm() {
                 </span>
               </label>
               {errors.termsAccepted ? (
-                <p className="mt-2 text-sm text-destructive" id="termsAccepted-error">
+                <p
+                  className="mt-2 text-sm text-destructive"
+                  id="termsAccepted-error"
+                  role="alert"
+                >
                   {errors.termsAccepted}
                 </p>
               ) : null}

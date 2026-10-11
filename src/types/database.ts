@@ -1,48 +1,97 @@
+type TableDefinition<Row, Insert, Update> = {
+  Row: Row;
+  Insert: Insert;
+  Update: Update;
+  Relationships: [];
+};
+
+type ProfileRow = {
+  id: string;
+  role: "job_seeker" | "admin" | "training_provider";
+  sector: "government" | "private" | null;
+  display_name: string | null;
+  location: string | null;
+  designation: string | null;
+  specialization: string | null;
+  terms_accepted_at: string | null;
+  account_status: "active" | "suspended";
+  education: string | null;
+  qualifications: string[];
+  skills: string[];
+  experience_years: number | null;
+  preferred_roles: string[];
+  preferred_locations: string[];
+  resume_path: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type JobRow = {
+  id: string;
+  organization_id: string;
+  title: string;
+  description: string;
+  requirements: string;
+  location: string;
+  employment_type: string;
+  required_skills: string[];
+  preferred_skills: string[];
+  required_qualifications: string[];
+  min_experience_years: number;
+  application_deadline: string | null;
+  status: "draft" | "published" | "closed";
+  published_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type CourseRow = {
+  id: string;
+  organization_id: string;
+  title: string;
+  description: string;
+  skills_taught: string[];
+  delivery_mode: "online" | "in_person" | "hybrid";
+  duration: string | null;
+  course_url: string;
+  status: "draft" | "published" | "closed";
+  published_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type ApplicationRow = {
+  id: string;
+  candidate_id: string;
+  job_id: string;
+  submitted_at: string;
+  status:
+    | "submitted"
+    | "under_review"
+    | "shortlisted"
+    | "rejected"
+    | "withdrawn";
+  status_changed_at: string;
+};
+
+type NotificationRow = {
+  id: string;
+  user_id: string;
+  title: string;
+  body: string;
+  href: string | null;
+  read_at: string | null;
+  created_at: string;
+};
+
 export type Database = {
   public: {
     Tables: {
-      profiles: {
-        Row: {
-          id: string;
-          role: Database["public"]["Enums"]["application_role"];
-          sector: Database["public"]["Enums"]["organization_sector"] | null;
-          display_name: string | null;
-          location: string | null;
-          designation: string | null;
-          specialization: string | null;
-          terms_accepted_at: string | null;
-          account_status: Database["public"]["Enums"]["account_status"];
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          id: string;
-          role?: Database["public"]["Enums"]["application_role"];
-          sector?: Database["public"]["Enums"]["organization_sector"] | null;
-          display_name?: string | null;
-          location?: string | null;
-          designation?: string | null;
-          specialization?: string | null;
-          terms_accepted_at?: string | null;
-          account_status?: Database["public"]["Enums"]["account_status"];
-          created_at?: string;
-          updated_at?: string;
-        };
-        Update: {
-          id?: string;
-          role?: Database["public"]["Enums"]["application_role"];
-          sector?: Database["public"]["Enums"]["organization_sector"] | null;
-          display_name?: string | null;
-          location?: string | null;
-          designation?: string | null;
-          specialization?: string | null;
-          terms_accepted_at?: string | null;
-          account_status?: Database["public"]["Enums"]["account_status"];
-          created_at?: string;
-          updated_at?: string;
-        };
-        Relationships: [];
-      };
+      profiles: TableDefinition<
+        ProfileRow,
+        Partial<ProfileRow> & { id: string },
+        Partial<ProfileRow>
+      >;
       organizations: {
         Row: {
           id: string;
@@ -132,6 +181,39 @@ export type Database = {
           },
         ];
       };
+      jobs: TableDefinition<JobRow, Partial<JobRow> & { organization_id: string; title: string; description: string; location: string; employment_type: string }, Partial<JobRow>>;
+      courses: TableDefinition<CourseRow, Partial<CourseRow> & { organization_id: string; title: string; description: string; delivery_mode: CourseRow["delivery_mode"]; course_url: string }, Partial<CourseRow>>;
+      saved_jobs: TableDefinition<
+        { candidate_id: string; job_id: string; created_at: string },
+        { candidate_id: string; job_id: string; created_at?: string },
+        never
+      >;
+      saved_courses: TableDefinition<
+        { candidate_id: string; course_id: string; created_at: string },
+        { candidate_id: string; course_id: string; created_at?: string },
+        never
+      >;
+      applications: TableDefinition<
+        ApplicationRow,
+        never,
+        never
+      >;
+      course_interactions: TableDefinition<
+        {
+          id: string;
+          candidate_id: string;
+          course_id: string;
+          interaction_type: "link_click" | "inquiry";
+          created_at: string;
+        },
+        never,
+        never
+      >;
+      notifications: TableDefinition<
+        NotificationRow,
+        never,
+        { read_at: string | null }
+      >;
     };
     Views: Record<string, never>;
     Functions: {
@@ -168,12 +250,36 @@ export type Database = {
         };
         Returns: undefined;
       };
+      check_job_eligibility: {
+        Args: { target_job_id: string };
+        Returns: { eligible: boolean; reasons: string[] }[];
+      };
+      apply_to_job: {
+        Args: { target_job_id: string };
+        Returns: string;
+      };
+      record_course_interaction: {
+        Args: {
+          target_course_id: string;
+          interaction: Database["public"]["Enums"]["course_interaction_type"];
+        };
+        Returns: string;
+      };
     };
     Enums: {
       application_role: "job_seeker" | "admin" | "training_provider";
       organization_sector: "government" | "private";
       account_status: "active" | "suspended";
       admin_access_request_status: "pending" | "approved" | "rejected";
+      job_publication_status: "draft" | "published" | "closed";
+      course_publication_status: "draft" | "published" | "closed";
+      application_status:
+        | "submitted"
+        | "under_review"
+        | "shortlisted"
+        | "rejected"
+        | "withdrawn";
+      course_interaction_type: "link_click" | "inquiry";
     };
     CompositeTypes: Record<string, never>;
   };

@@ -63,6 +63,27 @@ describe("registration form", () => {
     expect(signUp).not.toHaveBeenCalled();
   });
 
+  it("shows accessible field-level validation before submitting", async () => {
+    const user = userEvent.setup();
+    render(<RegisterForm />);
+
+    await user.click(screen.getByRole("radio", { name: "Admin" }));
+    await user.click(
+      screen.getByRole("button", { name: /request admin access/i }),
+    );
+
+    expect(screen.getByText("Choose a sector.")).toHaveAttribute(
+      "id",
+      "sector-error",
+    );
+    expect(screen.getByLabelText("Email address")).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
+    expect(screen.getByText("Enter your full name.")).toBeInTheDocument();
+    expect(signUp).not.toHaveBeenCalled();
+  });
+
   it("sends a real Auth signup request and displays the email-confirmation state", async () => {
     const user = userEvent.setup();
     signUp.mockResolvedValue({
@@ -163,6 +184,56 @@ describe("registration form", () => {
     expect(
       screen.getByRole("button", { name: /create account/i }),
     ).toBeEnabled();
+  });
+
+  it("prevents duplicate signup submissions while Supabase is pending", async () => {
+    const user = userEvent.setup();
+    let resolveSignup:
+      | ((value: {
+          data: {
+            user: { id: string; identities: { id: string }[] };
+            session: null;
+          };
+          error: null;
+        }) => void)
+      | undefined;
+    signUp.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveSignup = resolve;
+        }),
+    );
+    render(<RegisterForm />);
+
+    await user.click(screen.getByRole("radio", { name: /job seeker/i }));
+    await user.type(screen.getByLabelText("Full name"), "Taylor Lee");
+    await user.type(screen.getByLabelText("Email address"), "taylor@example.com");
+    await user.type(screen.getByLabelText("Password"), "longpassword123");
+    await user.type(
+      screen.getByLabelText("Confirm password"),
+      "longpassword123",
+    );
+    await user.click(
+      screen.getByRole("checkbox", {
+        name: /agree to the terms of service/i,
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: /create account/i }));
+
+    const submitButton = screen.getByRole("button", {
+      name: /creating your account/i,
+    });
+    expect(submitButton).toBeDisabled();
+    expect(signUp).toHaveBeenCalledOnce();
+
+    resolveSignup?.({
+      data: {
+        user: { id: "signup-test-user", identities: [{ id: "identity" }] },
+        session: null,
+      },
+      error: null,
+    });
+    expect(await screen.findByText("Check your inbox")).toBeInTheDocument();
   });
 
   it("submits admin access as a request instead of assuming admin privileges", async () => {

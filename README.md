@@ -1,9 +1,9 @@
 # RozgarLink
 
-RozgarLink is a skills-to-opportunity matching platform. This repository
-contains the Next.js frontend foundation, Supabase registration/login flow,
-and initial profile/organization schema. Job and course data, role-specific
-dashboards, and matching behavior have not been implemented.
+RozgarLink is a skills-to-opportunity matching platform. This repository contains the Next.js frontend, Supabase authentication,
+candidate profile, and job-seeker marketplace experience. Jobs and courses are
+loaded from published Supabase records; this application does not seed or
+present sample listings as real opportunities.
 
 ## Requirements
 
@@ -52,6 +52,7 @@ src/
 ├── components/
 │   ├── auth/               # Registration and login forms
 │   ├── layout/             # Shared site header and footer
+│   ├── seeker/             # Job-seeker navigation, forms, and cards
 │   ├── states/             # Reusable loading, empty, and error states
 │   └── ui/                 # shadcn/ui primitives
 ├── hooks/                  # Shared React hooks (ready for feature work)
@@ -65,9 +66,11 @@ supabase/
 └── migrations/             # Versioned PostgreSQL schema and RLS policies
 ```
 
-Next.js routes and route-level layouts belong under `src/app`. Shared layout
-components live in `src/components/layout`. The Python FastAPI service is not
-part of this frontend foundation yet.
+Next.js routes and route-level layouts belong under `src/app`. The job-seeker
+workspace is under `src/app/seeker`; shared seeker UI lives in
+`src/components/seeker`. The Python FastAPI service is not part of this
+frontend yet. Eligibility is currently checked by a guarded Supabase database
+function using the candidate's persisted profile.
 
 ## Supabase integration
 
@@ -96,12 +99,20 @@ part of this frontend foundation yet.
 
 The browser client is `createClient` from `@/lib/supabase/client`. Server
 components, route handlers, and server actions should use
-`createClient` from `@/lib/supabase/server`. For protected server operations,
-use `requireAuthenticatedUser` from `@/lib/supabase/auth`; it verifies the
-user with Supabase Auth's `getUser()` rather than trusting session data read
-from a cookie. The Next.js proxy refreshes sessions and forwards updated
-cookies; authentication operations that write cookies should run in a route
-handler or server action. Database access remains subject to RLS.
+`createClient` from `@/lib/supabase/server`. Login, logout, password recovery,
+and password changes run as server actions. The Next.js proxy refreshes
+sessions and authorizes `/seeker/*`, `/admin/*`, and `/trainer/*` paths from
+the authenticated user's database profile. Each role route layout repeats
+that authorization on the server before rendering. Never use browser-provided
+role data for access decisions.
+
+Set `NEXT_PUBLIC_SITE_URL` to the canonical app origin for password-reset
+emails; do not derive this URL from a request header. It defaults to
+`http://localhost:3000` in `.env.example`. Add
+`/auth/callback` and the recovery redirect
+`/auth/callback?next=/reset-password` to the Supabase Auth redirect URL
+allowlist for local and deployed origins. Password-reset links use the callback
+and return to `/reset-password`; email confirmation links return to `/login`.
 
 ### Apply database migrations
 
@@ -122,6 +133,9 @@ atomic even when email confirmation is enabled. Public signup can choose a
 job-seeker or training-provider profile; role and sector values are
 allowlisted by the trigger. Provider organizations are always created
 unverified. Signup cannot set account status or verify an organization.
+The fourth migration allows a suspended user to read their own profile status
+so the application can show the correct access-denied message; it does not
+grant access to another user's profile.
 
 Admin registration submits a request and initially provisions the account as
 a job seeker. An active administrator must approve the request using the
@@ -142,6 +156,23 @@ Keep the UUID specific to the intended account and run this using a trusted
 project-owner connection, not from the application. All later role and
 verification changes should use the guarded admin functions.
 
+The marketplace migration
+[`20261011000500_job_seeker_marketplace.sql`](./supabase/migrations/20261011000500_job_seeker_marketplace.sql)
+adds candidate profile preferences, published jobs and courses, saved items,
+applications, course-interest tracking, notifications, and a private resume
+bucket with owner-only policies. Apply it with the same `npx supabase db push`
+command above. Only authorized staff should create and publish actual job and
+course records; no demo records are included.
+
+Applications are created by the `apply_to_job` database function, which
+rechecks eligibility from the authenticated candidate's stored profile and
+prevents duplicate applications with a database uniqueness constraint.
+Eligibility is an exact match against required skills and qualifications plus
+minimum experience; it does not produce a match score. Course visits and
+inquiries are recorded separately and do not represent enrollment. Candidate
+resumes are private and must be downloaded through the authenticated
+`/seeker/profile/resume` route.
+
 Add your local and deployed app URLs to the Supabase Auth redirect URL
 allowlist. Registration email links return to `/auth/callback`, which
 exchanges the confirmation code for a session and then links to the login
@@ -154,10 +185,22 @@ page. The confirmation email template should use Supabase's
 npm run dev       # Start the development server
 npm run lint      # Run ESLint
 npm run typecheck # Run the TypeScript compiler without emitting files
-npm test          # Run registration validation and UI tests
+npm test          # Run authentication and seeker feature tests
 npm run build     # Create a production build
 npm run start     # Serve the production build
 ```
+
+## Authentication behavior
+
+After Supabase password authentication, the server reads `profiles.role` and
+`profiles.account_status` and routes active accounts to `/seeker/dashboard`,
+`/admin/dashboard`, or `/trainer/dashboard`. Suspended accounts are signed out.
+Missing profiles and profile lookup failures receive explicit login errors.
+Email verification must be completed before Supabase permits password login.
+Use the logout button in the authenticated header to end the server-managed
+Supabase session. The seeker routes require the marketplace migration and real
+published database records; if the migration is unapplied, the seeker error
+boundary offers a retry instead of showing fabricated data.
 
 ## UI foundation
 

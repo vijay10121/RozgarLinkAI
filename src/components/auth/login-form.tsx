@@ -1,60 +1,56 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
-import { ArrowRight, LoaderCircle, MailCheck } from "lucide-react";
+import { useActionState, useState } from "react";
+import { ArrowRight, Eye, EyeOff, LoaderCircle, MailCheck } from "lucide-react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 
+import { loginAction, type AuthActionState } from "@/app/auth/actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { createClient } from "@/lib/supabase/client";
-import { getRegistrationErrorMessage } from "@/lib/registration";
+import type { AuthField } from "@/lib/auth-validation";
+
+const loginErrors: Record<string, string> = {
+  account_suspended:
+    "This account is suspended. Contact support if you believe this is a mistake.",
+  email_verification:
+    "The verification link could not be used. It may have expired or already been used.",
+  logout_failed:
+    "We couldn’t confirm that you were logged out. Please try again.",
+  profile_missing:
+    "Your account profile is not ready. Contact support before trying again.",
+  profile_unavailable:
+    "We couldn’t verify your account profile. Please try again later.",
+  session_check_failed:
+    "Your session couldn’t be verified. Please try logging in again.",
+  session_expired: "Your session expired. Log in again to continue.",
+};
 
 export function LoginForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
+  const [showPassword, setShowPassword] = useState(false);
+  const [dismissedFields, setDismissedFields] = useState<
+    Partial<Record<AuthField, boolean>>
+  >({});
+  const [dismissedAuthError, setDismissedAuthError] = useState(false);
+  const [state, formAction, isPending] = useActionState(
+    async (previousState: AuthActionState, formData: FormData) => {
+      setDismissedFields({});
+      setDismissedAuthError(false);
+      return loginAction(previousState, formData);
+    },
+    {},
+  );
   const emailVerified = searchParams.get("verified") === "1";
-  const verificationError =
-    searchParams.get("error") === "email_verification";
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError("");
-
-    if (!email.trim() || !password) {
-      setError("Enter your email address and password.");
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      const supabase = createClient();
-      const { error: authError } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password,
-      });
-
-      if (authError) {
-        setError(
-          authError.message.toLowerCase().includes("email not confirmed")
-            ? "Verify your email using the link we sent before logging in."
-            : "We couldn’t log you in with those details. Check your email and password, then try again.",
-        );
-        return;
-      }
-
-      router.replace("/");
-    } catch (loginError) {
-      setError(getRegistrationErrorMessage(loginError));
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
+  const loggedOut = searchParams.get("logged_out") === "1";
+  const passwordUpdated = searchParams.get("password_updated") === "1";
+  const queryError = loginErrors[searchParams.get("error") ?? ""];
+  const error = (dismissedAuthError ? undefined : state.error) ?? queryError;
+  const emailError = dismissedFields.email ? undefined : state.fieldErrors?.email;
+  const passwordError = dismissedFields.password
+    ? undefined
+    : state.fieldErrors?.password;
 
   return (
     <div className="space-y-5">
@@ -67,12 +63,19 @@ export function LoginForm() {
           </AlertDescription>
         </Alert>
       ) : null}
-      {verificationError ? (
-        <Alert variant="destructive">
-          <AlertTitle>Verification link could not be used</AlertTitle>
+      {loggedOut ? (
+        <Alert>
+          <AlertTitle>You’re logged out</AlertTitle>
           <AlertDescription>
-            The link may have expired or already been used. Request a fresh
-            confirmation email from Supabase Auth.
+            Your RozgarLink session has been securely ended.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+      {passwordUpdated ? (
+        <Alert>
+          <AlertTitle>Password updated</AlertTitle>
+          <AlertDescription>
+            Your password has been changed. Log in with your new password.
           </AlertDescription>
         </Alert>
       ) : null}
@@ -83,7 +86,7 @@ export function LoginForm() {
         </Alert>
       ) : null}
 
-      <form className="space-y-5" onSubmit={handleSubmit}>
+      <form action={formAction} className="space-y-5" noValidate>
         <div className="space-y-2">
           <label
             className="text-sm font-medium text-foreground"
@@ -96,12 +99,22 @@ export function LoginForm() {
             className="h-11 bg-background"
             id="login-email"
             inputMode="email"
-            onChange={(event) => setEmail(event.target.value)}
+            name="email"
+            aria-describedby={emailError ? "login-email-error" : undefined}
+            aria-invalid={Boolean(emailError)}
+            onChange={() => {
+              setDismissedAuthError(true);
+              setDismissedFields((fields) => ({ ...fields, email: true }))
+            }}
             placeholder="you@example.com"
             required
             type="email"
-            value={email}
           />
+          {emailError ? (
+            <p className="text-sm text-destructive" id="login-email-error">
+              {emailError}
+            </p>
+          ) : null}
         </div>
         <div className="space-y-2">
           <label
@@ -110,23 +123,62 @@ export function LoginForm() {
           >
             Password
           </label>
-          <Input
-            autoComplete="current-password"
-            className="h-11 bg-background"
-            id="login-password"
-            onChange={(event) => setPassword(event.target.value)}
-            required
-            type="password"
-            value={password}
-          />
+          <div className="relative">
+            <Input
+              autoComplete="current-password"
+              className="h-11 bg-background pr-12"
+              id="login-password"
+              aria-describedby={
+                passwordError ? "login-password-error" : undefined
+              }
+              aria-invalid={Boolean(passwordError)}
+              minLength={1}
+              name="password"
+              onChange={() => {
+                setDismissedAuthError(true);
+                setDismissedFields((fields) => ({
+                  ...fields,
+                  password: true,
+                }))
+              }}
+              required
+              type={showPassword ? "text" : "password"}
+            />
+            <button
+              aria-label={showPassword ? "Hide password" : "Show password"}
+              aria-pressed={showPassword}
+              className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-md text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={() => setShowPassword((visible) => !visible)}
+              type="button"
+            >
+              {showPassword ? (
+                <EyeOff aria-hidden="true" className="size-4" />
+              ) : (
+                <Eye aria-hidden="true" className="size-4" />
+              )}
+            </button>
+          </div>
+          {passwordError ? (
+            <p className="text-sm text-destructive" id="login-password-error">
+              {passwordError}
+            </p>
+          ) : null}
+        </div>
+        <div className="-mt-2 flex justify-end">
+          <Link
+            className="text-sm font-semibold text-brand underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            href="/forgot-password"
+          >
+            Forgot password?
+          </Link>
         </div>
         <Button
           className="h-12 w-full gap-2 text-base"
-          disabled={isSubmitting}
+          disabled={isPending}
           size="lg"
           type="submit"
         >
-          {isSubmitting ? (
+          {isPending ? (
             <>
               <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
               Logging in…
